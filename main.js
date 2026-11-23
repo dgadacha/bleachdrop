@@ -63,8 +63,9 @@ const REGLAGES = {
     },
     {
       titre: 'Centipede',
-      note: 'Javel sur coton noir · dos',
+      note: 'Javel sur coton noir · face et dos',
       photos: [
+        { fichier: 'images/centipede-face.webp', legende: 'Face' },
         { fichier: 'images/centipede-dos.webp', legende: 'Dos' },
       ],
       prix: '5 000 XPF',
@@ -176,6 +177,24 @@ function baliseprix(piece) {
   return (piece.prixNormal ? `<s>${echapper(piece.prixNormal)}</s> ` : '')
     + `<strong>${echapper(piece.prix)}</strong>`
     + (piece.mention ? `<small>${echapper(piece.mention)}</small>` : '');
+}
+
+// À l'accueil, sur grand écran : les créations défilent à droite du logo.
+function poserAccueil() {
+  const cadre = document.getElementById('hero-visuel');
+  const photos = REGLAGES.pieces.flatMap((piece) => piece.photos || []);
+  // Les dos d'abord : c'est là que sont les grands motifs.
+  photos.sort((a, b) => (b.legende === 'Dos') - (a.legende === 'Dos'));
+  cadre.innerHTML = photos.map((photo, n) => `<img class="${n ? '' : 'active'}" src="${echapper(photo.fichier)}" alt="">`).join('');
+
+  const images = cadre.querySelectorAll('img');
+  if (images.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  let courante = 0;
+  setInterval(() => {
+    images[courante].classList.remove('active');
+    courante = (courante + 1) % images.length;
+    images[courante].classList.add('active');
+  }, 4500);
 }
 
 function poserGalerie() {
@@ -417,6 +436,7 @@ function brancherFormulaire() {
 }
 
 poserMarque();
+poserAccueil();
 poserGalerie();
 poserListes();
 poserPied();

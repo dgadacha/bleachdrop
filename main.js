@@ -30,7 +30,7 @@ const REGLAGES = {
   //  prix   : texte libre, par ex. '4 500 F'. Vide = « Prix sur demande ».
   pieces: [
     {
-      titre: 'Araignée',
+      titre: 'Spider-Man',
       note: 'Javel sur coton noir · face et dos',
       photos: [
         { fichier: 'images/araignee-face.webp', legende: 'Face' },
@@ -121,12 +121,6 @@ function poserMarque() {
   document.querySelectorAll('[data-marque]').forEach((el) => { el.textContent = REGLAGES.marque; });
   document.querySelectorAll('[data-signature]').forEach((el) => { el.textContent = REGLAGES.signature; });
   document.title = `${REGLAGES.marque} — tee-shirts à la javel`;
-}
-
-function poserHero() {
-  document.getElementById('motif-hero').innerHTML = dessinerColonne({
-    graine: 7, l: 900, h: 1400, nombre: 22, taille: 104, ampleur: 0.17, vagues: 1.7, centre: 0.6,
-  });
 }
 
 function visuelProvisoire(index) {
@@ -286,7 +280,6 @@ function brancherFormulaire() {
 }
 
 poserMarque();
-poserHero();
 poserGalerie();
 poserListes();
 poserPied();

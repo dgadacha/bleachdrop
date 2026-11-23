@@ -47,18 +47,9 @@
 
       <div data-panneau="commandes">
         <dl class="chiffres" id="chiffres"></dl>
+        <div class="filtres" id="filtres-commandes" role="toolbar" aria-label="Étapes des commandes"></div>
         <div class="outils">
-          <label>Afficher
-            <select id="filtre-statut">
-              <option value="actives">En cours</option>
-              <option value="toutes">Toutes</option>
-              <option value="nouvelle">Nouvelles</option>
-              <option value="acceptee">Acceptées</option>
-              <option value="en-cours">En fabrication</option>
-              <option value="remise">Remises</option>
-              <option value="annulee">Annulées</option>
-            </select>
-          </label>
+          <p class="discret">« En cours » montre d'abord les commandes à répondre, puis celles qui attendent le client, et ainsi de suite.</p>
           <button class="bouton" id="ajouter-commande">+ Commande à la main</button>
         </div>
         <div class="liste" id="liste-commandes"></div>

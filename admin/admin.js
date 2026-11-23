@@ -6,7 +6,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 import {
   getFirestore, collection, doc, onSnapshot, query, orderBy, limit, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  writeBatch, serverTimestamp, setDoc, connectFirestoreEmulator,
+  writeBatch, serverTimestamp, setDoc, arrayUnion, Timestamp, connectFirestoreEmulator,
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
 // Configuration publique du projet Firebase (aucun secret ici).
@@ -33,7 +33,6 @@ const PIECES_DU_SITE = [
   { titre: 'Magma', note: 'Javel sur coton noir · effet délavé, face et dos', photos: [{ fichier: 'images/magma-face.webp', legende: 'Face' }, { fichier: 'images/magma-dos.webp', legende: 'Dos' }] },
 ].map((piece) => ({ ...piece, prix: '6 000 XPF', visible: true }));
 
-const STATUTS = { nouvelle: 'Nouvelle', acceptee: 'Acceptée', 'en-cours': 'En fabrication', remise: 'Remise', annulee: 'Annulée' };
 const PAIEMENTS = ['', 'Espèces', 'Virement', 'Autre'];
 
 const $ = (id) => document.getElementById(id);
@@ -100,8 +99,25 @@ document.querySelectorAll('[data-fermer]').forEach((bouton) => bouton.addEventLi
 // ============================================================
 //  Commandes
 // ============================================================
+// Le parcours d'une commande, dans l'ordre. `suivante` donne le bouton « étape suivante ».
+const ETAPES = [
+  { id: 'nouvelle', nom: 'À répondre', court: 'Nouvelle', suivante: 'Je lui ai répondu' },
+  { id: 'repondu', nom: 'En attente du client', court: 'Répondu', suivante: 'Le client a validé' },
+  { id: 'validee', nom: 'Validées', court: 'Validée', suivante: 'Commencer la réalisation' },
+  { id: 'realisation', nom: 'En réalisation', court: 'En réalisation', suivante: 'Pièce prête' },
+  { id: 'prete', nom: 'Prêtes à remettre', court: 'Prête', suivante: 'Remise au client' },
+  { id: 'remise', nom: 'Remises', court: 'Remise' },
+  { id: 'annulee', nom: 'Annulées', court: 'Annulée' },
+];
+const ETAPE = Object.fromEntries(ETAPES.map((e, n) => [e.id, { ...e, rang: n }]));
+// Anciens statuts, d'avant ce parcours.
+const ANCIENS = { acceptee: 'validee', 'en-cours': 'realisation' };
+const etapeDe = (c) => ETAPE[ANCIENS[c.statut] || c.statut] || ETAPE.nouvelle;
+const EN_COURS = ['nouvelle', 'repondu', 'validee', 'realisation', 'prete'];
+
 let commandes = [];
 let dessinEnAttente = false;
+let filtreCommandes = 'en-cours';
 
 function ecouterCommandes() {
   return onSnapshot(query(collection(db, 'commandes'), orderBy('creeLe', 'desc')), (instantane) => {
@@ -115,30 +131,53 @@ function ecouterCommandes() {
   });
 }
 
+const jours = (date) => Math.floor((Date.now() - date.getTime()) / 86400000);
+const dateCourteFr = (t) => (t && t.toDate ? t.toDate().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '');
+
 function dessinerCommandes() {
   dessinEnAttente = false;
-  const comptees = commandes.filter((c) => c.statut !== 'annulee');
-  const recettes = comptees.reduce((total, c) => total + (c.prixPaye || 0), 0);
-  const depenses = comptees.reduce((total, c) => total + (c.depenses || 0), 0);
-  const aRemettre = comptees.filter((c) => c.statut !== 'remise').length;
-  const nouvelles = commandes.filter((c) => c.statut === 'nouvelle').length;
-  $('pastille-nouvelles').hidden = !nouvelles;
-  $('pastille-nouvelles').textContent = nouvelles;
+  const compte = (id) => commandes.filter((c) => etapeDe(c).id === id).length;
+  const actives = commandes.filter((c) => EN_COURS.includes(etapeDe(c).id));
+
+  // Chiffres : ce qui est encaissé (remises) et ce qui reste à encaisser (validées, en cours, prêtes).
+  const somme = (liste, champ) => liste.reduce((total, c) => total + (c[champ] || 0), 0);
+  const remises = commandes.filter((c) => etapeDe(c).id === 'remise');
+  const aEncaisser = commandes.filter((c) => ['validee', 'realisation', 'prete'].includes(etapeDe(c).id));
+  const nonAnnulees = commandes.filter((c) => etapeDe(c).id !== 'annulee');
+  const encaisse = somme(remises, 'prixPaye');
   $('chiffres').innerHTML = [
-    ['Commandes', comptees.length], ['À remettre', aRemettre], ['Recettes', xpf(recettes)],
-    ['Dépenses', xpf(depenses)], ['Bénéfice', xpf(recettes - depenses)],
+    ['À répondre', compte('nouvelle')], ['En cours', actives.length], ['Encaissé', xpf(encaisse)],
+    ['À encaisser', xpf(somme(aEncaisser, 'prixPaye'))], ['Dépenses', xpf(somme(nonAnnulees, 'depenses'))],
+    ['Bénéfice', xpf(encaisse - somme(remises, 'depenses'))],
   ].map(([nom, valeur]) => `<div><dt>${nom}</dt><dd>${valeur}</dd></div>`).join('');
 
-  const filtre = $('filtre-statut').value;
+  $('pastille-nouvelles').hidden = !compte('nouvelle');
+  $('pastille-nouvelles').textContent = compte('nouvelle');
+
+  // Les filtres par étape, avec leur nombre.
+  const filtres = [['en-cours', 'En cours', actives.length], ...ETAPES.map((e) => [e.id, e.nom, compte(e.id)]), ['toutes', 'Toutes', commandes.length]];
+  $('filtres-commandes').innerHTML = filtres.map(([id, nom, n]) => `<button type="button" class="filtre${id === filtreCommandes ? ' actif' : ''}" data-filtre="${id}" aria-pressed="${id === filtreCommandes}">${echapper(nom)} <span>${n}</span></button>`).join('');
+
   const visibles = commandes.filter((c) => {
-    if (filtre === 'toutes') return true;
-    if (filtre === 'actives') return c.statut !== 'remise' && c.statut !== 'annulee';
-    return c.statut === filtre;
+    if (filtreCommandes === 'toutes') return true;
+    if (filtreCommandes === 'en-cours') return EN_COURS.includes(etapeDe(c).id);
+    return etapeDe(c).id === filtreCommandes;
   });
+  // En cours : les plus urgentes d'abord (à répondre, puis en attente…), puis les plus anciennes.
+  if (filtreCommandes === 'en-cours') {
+    visibles.sort((a, b) => (etapeDe(a).rang - etapeDe(b).rang) || ((a.creeLe?.seconds || 0) - (b.creeLe?.seconds || 0)));
+  }
   $('liste-commandes').innerHTML = visibles.length ? visibles.map(carteCommande).join('')
-    : '<p class="vide">Aucune commande à afficher ici.</p>';
+    : '<p class="vide">Aucune commande à cette étape.</p>';
   remplirModeles();
 }
+
+$('filtres-commandes').addEventListener('click', (e) => {
+  const bouton = e.target.closest('[data-filtre]');
+  if (!bouton) return;
+  filtreCommandes = bouton.dataset.filtre;
+  dessinerCommandes();
+});
 
 // Images jointes par les clients, chargées une seule fois chacune.
 const modeles = new Map(); // modeleId -> promesse de l'adresse data:image/…
@@ -159,22 +198,64 @@ function remplirModeles() {
   });
 }
 
+// Le fil des étapes déjà passées, avec leur date.
+function filEtapes(c) {
+  const passages = [['Reçue', c.creeLe], ...(c.historique || []).map((h) => [(ETAPE[h.statut] || {}).court || h.statut, h.le])];
+  return passages.filter(([, le]) => le).map(([nom, le]) => `<li><span>${echapper(nom)}</span> ${echapper(dateCourteFr(le))}</li>`).join('');
+}
+
+// L'e-mail de réponse au client, déjà écrit : il ne reste qu'à compléter le prix et le délai.
+function lienReponse(c) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email || '')) return '';
+  const prenom = String(c.nom || '').trim().split(/\s+/)[0];
+  const prix = c.prixPaye ? `${c.prixPaye.toLocaleString('fr-FR')} XPF` : (String(c.prix || '').split(' (')[0] || '… XPF');
+  const corps = [
+    `Bonjour ${prenom},`,
+    '',
+    `Merci pour votre demande : ${c.piece}, taille ${c.taille}.`,
+    '',
+    `Prix : ${prix}`,
+    'Délai : …',
+    'Remise en main propre : …',
+    '',
+    'Si cela vous convient, répondez simplement à cet e-mail pour valider la commande.',
+    '',
+    'À bientôt,',
+    'L\'équipe bleach drop',
+  ].join('\n');
+  const sujet = `Votre commande bleach drop — ${c.piece}`;
+  return `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
+}
+
 function carteCommande(c) {
+  const etape = etapeDe(c);
   const date = c.creeLe && c.creeLe.toDate ? c.creeLe.toDate().toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }) : '';
   const contact = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email || '')
     ? `<a href="mailto:${echapper(c.email)}">${echapper(c.email)}</a>` : echapper(c.email || '');
   // Le téléphone se touche pour appeler depuis un portable.
   const tel = c.telephone ? `<a href="tel:${echapper(c.telephone.replace(/\s/g, ''))}">${echapper(c.telephone)}</a>` : '';
   const choix = (liste, valeur) => liste.map(([v, nom]) => `<option value="${echapper(v)}"${v === (valeur || '') ? ' selected' : ''}>${echapper(nom || '—')}</option>`).join('');
-  return `<article class="carte" data-id="${echapper(c.id)}">
+
+  // Depuis combien de temps la commande attend à cette étape.
+  const dernier = (c.historique || []).slice(-1)[0];
+  const depuis = dernier && dernier.le && dernier.le.toDate ? jours(dernier.le.toDate()) : (c.creeLe && c.creeLe.toDate ? jours(c.creeLe.toDate()) : 0);
+  let alerte = '';
+  if (etape.id === 'nouvelle' && depuis >= 1) alerte = `Sans réponse depuis ${depuis} jour${depuis > 1 ? 's' : ''}`;
+  if (etape.id === 'repondu' && depuis >= 3) alerte = `Client sans nouvelles depuis ${depuis} jours : relancer ?`;
+  if (c.remisePrevue && ['validee', 'realisation', 'prete'].includes(etape.id) && c.remisePrevue < new Date(Date.now() + 11 * 3600000).toISOString().slice(0, 10)) alerte = 'Date de remise dépassée';
+
+  const reponse = lienReponse(c);
+  return `<article class="carte etape-${etape.id}" data-id="${echapper(c.id)}">
     <div class="carte-tete">
+      <span class="etiquette${['nouvelle', 'prete'].includes(etape.id) ? ' forte' : ''}">${echapper(etape.court)}</span>
       <strong>${echapper(c.nom)}</strong>
       <span>${echapper(c.piece)} · ${echapper(c.taille)}</span>
-      ${c.statut === 'nouvelle' ? '<span class="etiquette forte">Nouvelle</span>' : ''}
       ${c.source === 'manuel' ? '<span class="etiquette">À la main</span>' : ''}
       ${c.modeleJoint && !c.modeleId ? '<span class="etiquette">Modèle joint : voir l\'e-mail</span>' : ''}
       <span class="date">${echapper(date)}</span>
     </div>
+    ${alerte ? `<p class="alerte">${echapper(alerte)}</p>` : ''}
+    <ol class="fil">${filEtapes(c)}</ol>
     <div class="carte-corps">
       ${contact || tel ? `<span>${[contact, tel].filter(Boolean).join(' · ')}</span>` : ''}
       ${c.pays ? `<span class="discret">Pays : ${echapper(c.pays)}</span>` : ''}
@@ -182,9 +263,15 @@ function carteCommande(c) {
       ${c.message ? `<p class="texte">${echapper(c.message)}</p>` : ''}
       ${c.modeleId ? `<button type="button" class="vignette" data-modele="${echapper(c.modeleId)}" aria-label="Agrandir le modèle joint"><img data-modele-img="${echapper(c.modeleId)}" alt="Modèle joint par le client"><span>Modèle joint · agrandir</span></button>` : ''}
     </div>
+    <div class="actions-commande">
+      ${etape.suivante ? `<button type="button" class="bouton bouton-plein" data-avancer>${echapper(etape.suivante)}</button>` : ''}
+      ${reponse && ['nouvelle', 'repondu'].includes(etape.id) ? `<a class="bouton" href="${echapper(reponse)}">Écrire la réponse</a>` : ''}
+      ${EN_COURS.includes(etape.id) ? '<button type="button" class="lien danger" data-annuler>Annuler la commande</button>' : ''}
+    </div>
     <div class="suivi">
-      <label>Statut <select data-champ="statut">${choix(Object.entries(STATUTS), c.statut)}</select></label>
-      <label>Prix payé (XPF) <input data-champ="prixPaye" type="number" inputmode="numeric" min="0" step="1" value="${c.prixPaye == null ? '' : echapper(c.prixPaye)}"></label>
+      <label>Étape <select data-champ="statut">${choix(ETAPES.map((e) => [e.id, e.court]), etape.id)}</select></label>
+      <label>Prix convenu (XPF) <input data-champ="prixPaye" type="number" inputmode="numeric" min="0" step="1" value="${c.prixPaye == null ? '' : echapper(c.prixPaye)}"></label>
+      <label>Remise prévue <input data-champ="remisePrevue" type="date" value="${echapper(c.remisePrevue || '')}"></label>
       <label>Dépenses (XPF) <input data-champ="depenses" type="number" inputmode="numeric" min="0" step="1" value="${c.depenses == null ? '' : echapper(c.depenses)}"></label>
       <label>Paiement <select data-champ="paiement">${choix(PAIEMENTS.map((p) => [p, p]), c.paiement)}</select></label>
       <label class="large">Note pour nous <input data-champ="noteInterne" maxlength="500" value="${echapper(c.noteInterne || '')}"></label>
@@ -196,19 +283,30 @@ function carteCommande(c) {
   </article>`;
 }
 
-$('filtre-statut').addEventListener('change', dessinerCommandes);
+// Change l'étape d'une commande et garde la trace du passage, avec la date.
+async function changerEtape(id, statut, etat) {
+  const maj = { statut, historique: arrayUnion({ statut, le: Timestamp.now() }) };
+  if (statut === 'remise') maj.remiseLe = serverTimestamp();
+  if (etat) etat.textContent = 'Enregistrement…';
+  try {
+    await updateDoc(doc(db, 'commandes', id), maj);
+    if (etat) etat.textContent = 'Enregistré';
+  } catch (erreur) {
+    if (etat) etat.textContent = 'Non enregistré. Réessaie.';
+    else alert('Modification impossible.');
+  }
+}
 
 $('liste-commandes').addEventListener('change', async (e) => {
   const champ = e.target.dataset.champ;
   if (!champ) return;
   const carte = e.target.closest('[data-id]');
   const etat = carte.querySelector('[data-etat]');
+  if (champ === 'statut') { await changerEtape(carte.dataset.id, e.target.value, etat); return; }
   const valeur = ['prixPaye', 'depenses'].includes(champ) ? nombre(e.target.value) : e.target.value;
-  const maj = { [champ]: valeur };
-  if (champ === 'statut' && valeur === 'remise') maj.remiseLe = serverTimestamp();
   etat.textContent = 'Enregistrement…';
   try {
-    await updateDoc(doc(db, 'commandes', carte.dataset.id), maj);
+    await updateDoc(doc(db, 'commandes', carte.dataset.id), { [champ]: valeur });
     etat.textContent = 'Enregistré';
   } catch (erreur) {
     etat.textContent = 'Non enregistré. Réessaie.';
@@ -229,9 +327,22 @@ $('liste-commandes').addEventListener('click', async (e) => {
     return;
   }
 
-  if (!e.target.matches('[data-supprimer]')) return;
   const carte = e.target.closest('[data-id]');
+  if (!carte) return;
   const c = commandes.find((x) => x.id === carte.dataset.id);
+
+  // Bouton « étape suivante ».
+  if (e.target.matches('[data-avancer]')) {
+    const suivante = ETAPES[etapeDe(c).rang + 1];
+    if (suivante && suivante.id !== 'annulee') await changerEtape(c.id, suivante.id, carte.querySelector('[data-etat]'));
+    return;
+  }
+  if (e.target.matches('[data-annuler]')) {
+    if (confirm(`Annuler la commande de ${c.nom} ?\nElle reste visible dans « Annulées ».`)) await changerEtape(c.id, 'annulee', carte.querySelector('[data-etat]'));
+    return;
+  }
+
+  if (!e.target.matches('[data-supprimer]')) return;
   if (!confirm(`Supprimer définitivement la commande de ${c ? c.nom : 'ce client'} ?\nPour la garder dans les comptes, passe-la plutôt en « Annulée ».`)) return;
   try {
     await deleteDoc(doc(db, 'commandes', carte.dataset.id));
@@ -253,10 +364,12 @@ $('formulaire-commande').addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target;
   try {
+    // Une commande saisie à la main est déjà convenue avec le client.
     await addDoc(collection(db, 'commandes'), {
       nom: f.nom.value.trim(), email: f.email.value.trim(), telephone: f.telephone.value.trim(),
       piece: f.piece.value.trim(), taille: f.taille.value,
-      message: f.message.value.trim(), statut: 'acceptee', source: 'manuel', creeLe: serverTimestamp(),
+      message: f.message.value.trim(), statut: 'validee', source: 'manuel', creeLe: serverTimestamp(),
+      historique: [{ statut: 'validee', le: Timestamp.now() }],
     });
     $('fiche-commande').close();
   } catch (erreur) {

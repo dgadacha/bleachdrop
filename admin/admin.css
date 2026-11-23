@@ -142,6 +142,21 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
 .carte-pied { display: flex; justify-content: space-between; align-items: center; padding: 0 16px 8px; }
 .enregistre { font-size: 11px; color: var(--gris); }
 
+/* ---------- Parcours des commandes ---------- */
+.filtres { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.filtre { min-height: 40px; padding: 0 12px; border: 1px solid #444; background: none; color: var(--gris); font: 400 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.filtre span { margin-left: 6px; color: var(--blanc); }
+.filtre.actif { border-color: var(--blanc); background: var(--blanc); color: var(--noir); }
+.filtre.actif span { color: var(--noir); }
+.alerte { margin: 10px 16px 0; padding: 8px 10px; border-left: 2px solid var(--blanc); font-size: 12px; color: var(--blanc); background: #1a1a1a; }
+.fil { list-style: none; margin: 10px 16px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: var(--gris); }
+.fil li { position: relative; }
+.fil li + li::before { content: "→"; position: absolute; left: -11px; color: #555; }
+.fil span { color: #cfcfcb; }
+.actions-commande { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--trait); }
+.actions-commande .lien.danger { margin-left: auto; }
+.carte.etape-annulee, .carte.etape-remise { opacity: .75; }
+
 /* ---------- Modèle joint ---------- */
 .vignette { display: inline-flex; align-items: center; gap: 12px; justify-self: start; margin-top: 4px; padding: 6px 12px 6px 6px; border: 1px solid #555; background: none; color: var(--blanc); font: 400 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; cursor: zoom-in; }
 .vignette img { width: 64px; height: 64px; object-fit: cover; background: #151515; }

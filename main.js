@@ -39,6 +39,9 @@ const REGLAGES = {
   // Tarif normal du motif sur mesure, affiché près du formulaire (vide = masqué).
   prixSurMesure: 'à partir de 6 500 XPF',
 
+  // La photo montrée en premier dans la galerie, quand une pièce en a plusieurs.
+  vueParDefaut: 'Dos',
+
   // true = les photos passent en noir et blanc. false = vraies couleurs.
   photosEnNoirEtBlanc: false,
 
@@ -222,8 +225,9 @@ function poserGalerie() {
         + (photos[0].legende ? `<span class="a-venir">${echapper(photos[0].legende)}</span>` : '');
     } else {
       // Plusieurs photos : une seule visible, des boutons pour passer de l'une à l'autre.
-      visuel = photos.map((photo, n) => `<img class="vue${n ? '' : ' active'}" src="${echapper(photo.fichier)}" alt="${nom(photo)}" loading="lazy">`).join('')
-        + `<div class="vues">${photos.map((photo, n) => `<button type="button" data-vue="${n}" aria-pressed="${n ? 'false' : 'true'}">${echapper(photo.legende || `Photo ${n + 1}`)}</button>`).join('')}</div>`;
+      const debut = Math.max(0, photos.findIndex((photo) => photo.legende === REGLAGES.vueParDefaut));
+      visuel = photos.map((photo, n) => `<img class="vue${n === debut ? ' active' : ''}" src="${echapper(photo.fichier)}" alt="${nom(photo)}" loading="lazy">`).join('')
+        + `<div class="vues">${photos.map((photo, n) => `<button type="button" data-vue="${n}" aria-pressed="${n === debut}">${echapper(photo.legende || `Photo ${n + 1}`)}</button>`).join('')}</div>`;
     }
     return `<article class="piece">
       <div class="piece-visuel">${visuel}</div>

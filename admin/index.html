@@ -178,6 +178,26 @@
     </form>
   </dialog>
 
+  <!-- Réponse au client, envoyée depuis commandes@bleachdrop.com -->
+  <dialog id="fiche-reponse">
+    <form method="dialog" id="formulaire-reponse">
+      <h2>Répondre au client</h2>
+      <p class="discret" id="destinataire-reponse"></p>
+      <div class="deux">
+        <label>Prix (XPF) <input name="prix" type="number" inputmode="numeric" min="0" max="1000000" step="1" required></label>
+        <label>Délai <input name="delai" required maxlength="200" placeholder="environ 1 semaine"></label>
+      </div>
+      <label>Remise <input name="remise" maxlength="300" placeholder="En main propre à Nouméa, on convient du lieu ensemble"></label>
+      <label>Message (facultatif) <textarea name="message" rows="4" maxlength="3000" placeholder="Un mot sur le motif, une question…"></textarea></label>
+      <p class="discret">Le client reçoit un e-mail aux couleurs du site, avec ces informations et l'invitation à répondre pour valider. Une copie arrive dans votre boîte, et sa réponse aussi.</p>
+      <p class="message" id="message-reponse" role="status"></p>
+      <div class="actions">
+        <button type="button" class="bouton" data-fermer>Annuler</button>
+        <button type="submit" class="bouton bouton-plein">Envoyer</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Modèle joint par un client, en grand -->
   <dialog id="fiche-modele" aria-label="Modèle joint par le client">
     <div class="modele-plein">

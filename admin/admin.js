@@ -204,29 +204,6 @@ function filEtapes(c) {
   return passages.filter(([, le]) => le).map(([nom, le]) => `<li><span>${echapper(nom)}</span> ${echapper(dateCourteFr(le))}</li>`).join('');
 }
 
-// L'e-mail de réponse au client, déjà écrit : il ne reste qu'à compléter le prix et le délai.
-function lienReponse(c) {
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email || '')) return '';
-  const prenom = String(c.nom || '').trim().split(/\s+/)[0];
-  const prix = c.prixPaye ? `${c.prixPaye.toLocaleString('fr-FR')} XPF` : (String(c.prix || '').split(' (')[0] || '… XPF');
-  const corps = [
-    `Bonjour ${prenom},`,
-    '',
-    `Merci pour votre demande : ${c.piece}, taille ${c.taille}.`,
-    '',
-    `Prix : ${prix}`,
-    'Délai : …',
-    'Remise en main propre : …',
-    '',
-    'Si cela vous convient, répondez simplement à cet e-mail pour valider la commande.',
-    '',
-    'À bientôt,',
-    'L\'équipe bleach drop',
-  ].join('\n');
-  const sujet = `Votre commande bleach drop — ${c.piece}`;
-  return `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
-}
-
 function carteCommande(c) {
   const etape = etapeDe(c);
   const date = c.creeLe && c.creeLe.toDate ? c.creeLe.toDate().toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }) : '';
@@ -244,7 +221,8 @@ function carteCommande(c) {
   if (etape.id === 'repondu' && depuis >= 3) alerte = `Client sans nouvelles depuis ${depuis} jours : relancer ?`;
   if (c.remisePrevue && ['validee', 'realisation', 'prete'].includes(etape.id) && c.remisePrevue < new Date(Date.now() + 11 * 3600000).toISOString().slice(0, 10)) alerte = 'Date de remise dépassée';
 
-  const reponse = lienReponse(c);
+  const emailValable = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email || '');
+  const reponses = (c.reponses || []).map((r) => `<li>Réponse envoyée le ${echapper(dateCourteFr(r.le))} : ${echapper(xpf(r.prix))} · ${echapper(r.delai)}</li>`).join('');
   return `<article class="carte etape-${etape.id}" data-id="${echapper(c.id)}">
     <div class="carte-tete">
       <span class="etiquette${['nouvelle', 'prete'].includes(etape.id) ? ' forte' : ''}">${echapper(etape.court)}</span>
@@ -261,11 +239,12 @@ function carteCommande(c) {
       ${c.pays ? `<span class="discret">Pays : ${echapper(c.pays)}</span>` : ''}
       ${c.prix ? `<span class="discret">Prix affiché : ${echapper(c.prix)}</span>` : ''}
       ${c.message ? `<p class="texte">${echapper(c.message)}</p>` : ''}
+      ${reponses ? `<ul class="reponses">${reponses}</ul>` : ''}
       ${c.modeleId ? `<button type="button" class="vignette" data-modele="${echapper(c.modeleId)}" aria-label="Agrandir le modèle joint"><img data-modele-img="${echapper(c.modeleId)}" alt="Modèle joint par le client"><span>Modèle joint · agrandir</span></button>` : ''}
     </div>
     <div class="actions-commande">
       ${etape.suivante ? `<button type="button" class="bouton bouton-plein" data-avancer>${echapper(etape.suivante)}</button>` : ''}
-      ${reponse && ['nouvelle', 'repondu'].includes(etape.id) ? `<a class="bouton" href="${echapper(reponse)}">Écrire la réponse</a>` : ''}
+      ${emailValable && ['nouvelle', 'repondu'].includes(etape.id) ? `<button type="button" class="bouton" data-repondre>${c.reponses && c.reponses.length ? 'Envoyer une autre réponse' : 'Répondre au client'}</button>` : ''}
       ${EN_COURS.includes(etape.id) ? '<button type="button" class="lien danger" data-annuler>Annuler la commande</button>' : ''}
     </div>
     <div class="suivi">
@@ -337,6 +316,7 @@ $('liste-commandes').addEventListener('click', async (e) => {
     if (suivante && suivante.id !== 'annulee') await changerEtape(c.id, suivante.id, carte.querySelector('[data-etat]'));
     return;
   }
+  if (e.target.matches('[data-repondre]')) { ouvrirReponse(c); return; }
   if (e.target.matches('[data-annuler]')) {
     if (confirm(`Annuler la commande de ${c.nom} ?\nElle reste visible dans « Annulées ».`)) await changerEtape(c.id, 'annulee', carte.querySelector('[data-etat]'));
     return;
@@ -350,6 +330,64 @@ $('liste-commandes').addEventListener('click', async (e) => {
     if (c && c.modeleId) await deleteDoc(doc(db, 'modeles', c.modeleId)).catch(() => {});
   } catch (erreur) {
     alert('Suppression impossible.');
+  }
+});
+
+// ---------- Réponse au client
+let commandeEnReponse = null;
+
+function ouvrirReponse(c) {
+  const f = $('formulaire-reponse');
+  f.reset();
+  commandeEnReponse = c;
+  const derniere = (c.reponses || []).slice(-1)[0] || {};
+  const prixAffiche = parseInt(String(c.prix || '').split('(')[0].replace(/\D/g, ''), 10);
+  f.prix.value = c.prixPaye != null ? c.prixPaye : (derniere.prix != null ? derniere.prix : (Number.isNaN(prixAffiche) ? '' : prixAffiche));
+  f.delai.value = derniere.delai || '';
+  f.remise.value = derniere.remise || 'En main propre à Nouméa, on convient du lieu ensemble';
+  $('destinataire-reponse').textContent = `À ${c.nom} · ${c.email} · ${c.piece}, taille ${c.taille}`;
+  $('message-reponse').textContent = '';
+  $('fiche-reponse').showModal();
+}
+
+$('formulaire-reponse').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const c = commandeEnReponse;
+  const bouton = f.querySelector('[type="submit"]');
+  const proposition = { prix: Number(f.prix.value), delai: f.delai.value.trim(), remise: f.remise.value.trim(), message: f.message.value.trim() };
+  if (!Number.isInteger(proposition.prix) || proposition.prix < 0) { $('message-reponse').textContent = 'Indique un prix en nombre entier.'; return; }
+  if (!proposition.delai) { $('message-reponse').textContent = 'Indique un délai.'; return; }
+  bouton.disabled = true;
+  $('message-reponse').textContent = 'Envoi…';
+  try {
+    const jeton = await auth.currentUser.getIdToken();
+    const reponse = await fetch('/api/repondre', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}` },
+      body: JSON.stringify({ nom: c.nom, email: c.email, piece: c.piece, taille: c.taille, ...proposition }),
+    });
+    const resultat = await reponse.json().catch(() => ({}));
+    if (!reponse.ok) throw new Error(resultat.erreur || `L'e-mail n'est pas parti (${reponse.status}).`);
+  } catch (erreur) {
+    $('message-reponse').textContent = erreur instanceof TypeError ? 'Envoi impossible. Vérifie ta connexion.' : erreur.message;
+    bouton.disabled = false;
+    return;
+  }
+
+  // L'e-mail est parti : on garde la trace dans la commande.
+  const maj = { prixPaye: proposition.prix, reponses: arrayUnion({ ...proposition, le: Timestamp.now() }) };
+  if (etapeDe(c).id === 'nouvelle') {
+    maj.statut = 'repondu';
+    maj.historique = arrayUnion({ statut: 'repondu', le: Timestamp.now() });
+  }
+  try {
+    await updateDoc(doc(db, 'commandes', c.id), maj);
+    $('fiche-reponse').close('envoye');
+  } catch (erreur) {
+    $('message-reponse').textContent = 'E-mail envoyé, mais la commande n\'a pas pu être mise à jour : change l\'étape à la main.';
+  } finally {
+    bouton.disabled = false;
   }
 });
 

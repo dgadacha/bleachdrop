@@ -389,6 +389,14 @@ h2 {
 .erreur { min-height: 1.4em; margin-top: 4px; font-size: 12px; color: var(--blanc); }
 .erreur:not(:empty)::before { content: "† "; }
 
+.prix-choisi { margin-top: 8px; font-size: 12px; line-height: 1.5; color: #cfcfcb; }
+.prix-choisi:empty { display: none; }
+
+.mention-donnees { margin: -8px 0 0; font-size: 12px; line-height: 1.6; color: var(--gris); }
+.mention-donnees a { color: var(--blanc); text-underline-offset: 4px; white-space: nowrap; }
+
+.legal section[id] { scroll-margin-top: 110px; }
+
 .pot-de-miel { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 
 .envoi { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }

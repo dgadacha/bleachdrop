@@ -258,7 +258,10 @@ function poserGalerie() {
 function brancherGalerie() {
   document.getElementById('galerie').addEventListener('click', (e) => {
     const lien = e.target.closest('[data-piece]');
-    if (lien) document.getElementById('piece').value = lien.dataset.piece;
+    if (lien) {
+      document.getElementById('piece').value = lien.dataset.piece;
+      majPrixChoisi();
+    }
 
     const bouton = e.target.closest('[data-vue]');
     if (bouton) {
@@ -350,6 +353,20 @@ function redessinerListes() {
   poserListes();
   liste.value = choisie;
   if (liste.selectedIndex < 0) liste.value = '';
+  majPrixChoisi();
+}
+
+// Sous la liste : le prix complet de la pièce choisie, avec l'offre en cours.
+function majPrixChoisi() {
+  const valeur = document.getElementById('piece').value;
+  const fiche = valeur === SUR_MESURE ? null : REGLAGES.pieces.find((p) => p.titre === valeur);
+  const ligne = document.getElementById('prix-choisi');
+  const p = valeur && (valeur === SUR_MESURE || fiche) ? prixPour(fiche) : null;
+  if (!p || !p.normal) { ligne.textContent = ''; return; }
+  const majuscule = (texte) => texte.charAt(0).toUpperCase() + texte.slice(1);
+  ligne.textContent = p.offre
+    ? `${majuscule(p.actuel)} au lieu de ${p.normal.replace(/^à partir de /i, '')} · ${p.offre.nom || 'offre'} jusqu'au ${dateCourte(p.offre.fin)}`
+    : majuscule(p.normal);
 }
 
 // Les offres actives de la base remplacent celles écrites dans REGLAGES.
@@ -402,8 +419,9 @@ function poserListes() {
   const option = (valeur, texte = valeur) => `<option value="${echapper(valeur)}">${echapper(texte)}</option>`;
   document.getElementById('piece').innerHTML = option('', 'Choisir…')
     + REGLAGES.pieces.map((p) => option(p.titre, p.prix ? `${p.titre} — ${prixPour(p).actuel}` : p.titre)).join('')
+    // « à partir de » devient « dès » : sinon le prix est coupé sur téléphone.
     + (REGLAGES.surMesure
-      ? option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${prixPour(null).actuel}` : SUR_MESURE)
+      ? option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${prixPour(null).actuel.replace(/^à partir de /i, 'dès ')}` : SUR_MESURE)
       : '');
   document.getElementById('intro-pieces').textContent = REGLAGES.surMesure
     ? 'Commandez une pièce, ou demandez un motif rien que pour vous.'
@@ -630,6 +648,9 @@ function brancherFormulaire() {
       bouton.textContent = 'Envoyer la demande';
     }
   });
+
+  document.getElementById('piece').addEventListener('change', majPrixChoisi);
+  formulaire.addEventListener('reset', () => setTimeout(majPrixChoisi));
 
   formulaire.addEventListener('input', (e) => {
     const champ = e.target.closest('.champ');

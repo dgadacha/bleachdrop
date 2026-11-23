@@ -105,6 +105,7 @@
         <div class="champ">
           <label for="piece">Pièce</label>
           <select id="piece" name="piece" required></select>
+          <p class="prix-choisi" id="prix-choisi" aria-live="polite"></p>
           <p class="erreur" data-erreur="piece"></p>
         </div>
         <div class="champ">
@@ -127,6 +128,10 @@
           <label for="site">Ne pas remplir</label>
           <input id="site" name="site" type="text" tabindex="-1" autocomplete="off">
         </div>
+        <p class="champ-large mention-donnees">
+          Vos informations servent uniquement à traiter votre demande. Elles ne sont ni vendues ni utilisées pour de la publicité.
+          <a href="/mentions-legales.html#confidentialite">En savoir plus</a>
+        </p>
         <div class="champ-large envoi">
           <button class="bouton bouton-plein" type="submit" id="envoyer">Envoyer la demande</button>
           <p class="etat" id="etat" role="status" aria-live="polite"></p>
@@ -140,7 +145,7 @@
     <span class="pied-marque"><img src="images/logo-petit.webp" alt="bleach drop" width="440" height="261" loading="lazy"> <small data-signature></small></span>
     <span id="liens-pied"></span>
     <span>Fait main · Pièces uniques</span>
-    <span><a href="/mentions-legales.html">Mentions légales</a></span>
+    <span><a href="/mentions-legales.html">Mentions légales et confidentialité</a></span>
   </footer>
 
   <script src="main.js"></script>

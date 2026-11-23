@@ -10,7 +10,7 @@ service cloud.firestore {
     // « Connecté avec Google » ne suffit pas : n'importe qui peut l'être.
     function estAdmin() {
       return request.auth != null && request.auth.uid in [
-        'A_REMPLACER_UID_1',
+        'ppIfe4YiG4ajFoJ9xEJNJZwjTKm1',
         'A_REMPLACER_UID_2'
       ];
     }

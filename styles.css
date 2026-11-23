@@ -421,6 +421,20 @@ h2 {
 /* La police gothique n'existe qu'en une graisse : pas de faux gras */
 h2, .etapes h3 { font-weight: 400; }
 
+/* ---------- Mentions légales ---------- */
+
+.legal { max-width: 760px; margin: 0 auto; padding: clamp(120px, 18vh, 170px) var(--marge) clamp(56px, 10vw, 110px); }
+.legal-titre { font-family: var(--gothique); font-weight: 400; font-size: clamp(44px, 9vw, 76px); line-height: 1; margin: 0 0 8px; }
+.legal-date { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--gris); margin-bottom: 40px; }
+.legal section { padding: 28px 0; border-top: 1px solid var(--trait); }
+.legal h2 { font-size: clamp(28px, 5vw, 36px); margin: 0 0 14px; }
+.legal p, .legal li { color: #cfcfcb; }
+.legal p + p, .legal ul + p { margin-top: 12px; }
+.legal ul { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 8px; }
+.legal strong { font-weight: 500; color: var(--blanc); }
+.legal a { text-underline-offset: 4px; }
+.legal-retour { padding-top: 28px; border-top: 1px solid var(--trait); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; }
+
 /* ---------- Téléphone ---------- */
 
 @media (max-width: 640px) {

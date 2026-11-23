@@ -39,6 +39,7 @@
 
     <section class="hero">
       <div class="hero-texte">
+        <p class="promo" data-promo hidden></p>
         <p class="sur-titre">Tee-shirts décolorés à la javel</p>
         <h1 data-marque></h1>
         <p class="signature" data-signature></p>
@@ -88,6 +89,8 @@
         <p>Dites ce que vous voulez. Vous recevez une réponse avec le prix et le délai avant tout paiement.</p>
       </header>
 
+      <p class="promo promo-commande" data-promo hidden></p>
+
       <form class="formulaire" id="formulaire" novalidate>
         <div class="champ">
           <label for="nom">Nom</label>
@@ -108,6 +111,12 @@
           <label for="taille">Taille</label>
           <select id="taille" name="taille" required></select>
           <p class="erreur" data-erreur="taille"></p>
+        </div>
+        <div class="champ" id="champ-code" hidden>
+          <label for="code">Code promo</label>
+          <input id="code" name="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Facultatif">
+          <p class="erreur" data-erreur="code"></p>
+          <p class="aide" id="aide-code" aria-live="polite"></p>
         </div>
         <div class="champ champ-large">
           <label for="message">Message</label>

@@ -91,6 +91,24 @@ h1, h2, h3, p { margin: 0; }
 
 .hero-texte { position: relative; z-index: 2; max-width: 720px; }
 
+.promo {
+  display: inline-block;
+  margin-bottom: 22px;
+  padding: 8px 12px;
+  border: 1px solid var(--blanc);
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: .06em;
+}
+
+.promo strong { font-weight: 500; }
+.promo[hidden], .champ[hidden] { display: none; }
+.promo-commande { margin: -16px 0 36px; }
+.champ #code { text-transform: uppercase; letter-spacing: .12em; }
+.champ #code::placeholder { text-transform: none; letter-spacing: 0; }
+.aide { font-size: 12px; color: var(--blanc); }
+.aide:empty { display: none; }
+
 .sur-titre {
   font-size: 11px;
   letter-spacing: .28em;

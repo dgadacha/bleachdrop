@@ -21,6 +21,18 @@ const REGLAGES = {
 
   tailles: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
 
+  // Offre avec code promo. Mettre `code: ''` pour tout masquer.
+  //  reduction : en pourcentage.
+  //  fin       : l'offre s'arrête à cette date et heure (ici le 25 décembre
+  //              à minuit, heure de Nouméa). Passé ce moment, le bandeau
+  //              disparaît et le code est refusé, sans rien toucher.
+  promo: {
+    code: 'BLEACH20',
+    reduction: 20,
+    fin: '2026-12-25T00:00:00+11:00',
+    finTexte: 'avant le 25 décembre',
+  },
+
   // Tarif du motif sur mesure, affiché près du formulaire (vide = masqué).
   prixSurMesure: 'à partir de 6 500 XPF',
 
@@ -185,6 +197,40 @@ function poserPied() {
 }
 
 // ============================================================
+//  Offre avec code promo
+// ============================================================
+const promoActive = () => Boolean(REGLAGES.promo && REGLAGES.promo.code) && Date.now() < new Date(REGLAGES.promo.fin).getTime();
+
+// Renvoie '' si le code est bon (ou vide), sinon le message d'erreur.
+function refusCode(code) {
+  if (!code) return '';
+  const promo = REGLAGES.promo;
+  if (!promo || !promo.code || code.toUpperCase() !== promo.code.toUpperCase()) return 'Ce code n\'existe pas.';
+  if (!promoActive()) return 'Cette offre est terminée.';
+  return '';
+}
+
+// Prix après réduction pour une pièce au prix chiffré, sinon ''.
+function prixReduit(titre) {
+  const piece = REGLAGES.pieces.find((p) => p.titre === titre);
+  const montant = piece && piece.prix ? parseInt(piece.prix.replace(/\D/g, ''), 10) : NaN;
+  if (!montant) return '';
+  const reduit = Math.round(montant * (100 - REGLAGES.promo.reduction) / 100);
+  return `${String(reduit).replace(/\B(?=(\d{3})+$)/g, ' ')} XPF`;
+}
+
+function poserPromo() {
+  const actif = promoActive();
+  document.querySelectorAll('[data-promo]').forEach((el) => {
+    el.hidden = !actif;
+    if (actif) {
+      el.innerHTML = `Offre de lancement · <strong>−${REGLAGES.promo.reduction} %</strong> avec le code <strong>${echapper(REGLAGES.promo.code)}</strong>, pour toute commande ${echapper(REGLAGES.promo.finTexte)}`;
+    }
+  });
+  document.getElementById('champ-code').hidden = !actif;
+}
+
+// ============================================================
 //  Formulaire de commande
 // ============================================================
 function verifier(d) {
@@ -193,6 +239,7 @@ function verifier(d) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) erreurs.email = 'Indiquez une adresse e-mail valide.';
   if (!d.piece) erreurs.piece = 'Choisissez une pièce, ou « Motif sur mesure ».';
   if (!d.taille) erreurs.taille = 'Choisissez une taille.';
+  if (refusCode(d.code)) erreurs.code = refusCode(d.code);
   if (d.piece === SUR_MESURE && d.message.length < 10) erreurs.message = 'Décrivez le motif que vous imaginez.';
   return erreurs;
 }
@@ -203,6 +250,7 @@ function ecrireMessage(d) {
     `E-mail : ${d.email}`,
     `Pièce : ${d.piece}`,
     `Taille : ${d.taille}`,
+    ...(d.code ? [`Code promo : ${d.code} (−${REGLAGES.promo.reduction} %)`] : []),
     '',
     d.message || '(pas de message)',
   ].join('\n');
@@ -248,6 +296,7 @@ function brancherFormulaire() {
     if (brut.site) return; // un robot a rempli le champ caché
     const d = {
       nom: brut.nom.trim(), email: brut.email.trim(), piece: brut.piece, taille: brut.taille, message: brut.message.trim(),
+      code: (brut.code || '').trim().toUpperCase(),
     };
 
     const erreurs = verifier(d);
@@ -277,6 +326,19 @@ function brancherFormulaire() {
     }
   });
 
+  // Sous le champ du code : ce que la réduction donne, en direct.
+  const aide = document.getElementById('aide-code');
+  const majAide = () => {
+    const code = formulaire.code.value.trim();
+    if (!code || refusCode(code)) { aide.textContent = ''; return; }
+    const reduit = prixReduit(formulaire.piece.value);
+    aide.textContent = `Code appliqué : −${REGLAGES.promo.reduction} %${reduit ? `, soit ${reduit}` : ''}.`;
+  };
+  formulaire.addEventListener('input', majAide);
+  formulaire.addEventListener('change', majAide);
+  document.getElementById('galerie').addEventListener('click', () => setTimeout(majAide));
+  formulaire.addEventListener('reset', () => setTimeout(majAide));
+
   formulaire.addEventListener('input', (e) => {
     const champ = e.target.closest('.champ');
     if (champ && champ.classList.contains('invalide')) {
@@ -290,4 +352,5 @@ poserMarque();
 poserGalerie();
 poserListes();
 poserPied();
+poserPromo();
 brancherFormulaire();

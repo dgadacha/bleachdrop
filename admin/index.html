@@ -42,6 +42,7 @@
       <nav class="onglets" role="tablist">
         <button role="tab" data-onglet="commandes" aria-selected="true">Commandes <span class="pastille" id="pastille-nouvelles" hidden></span></button>
         <button role="tab" data-onglet="articles" aria-selected="false">Articles</button>
+        <button role="tab" data-onglet="offres" aria-selected="false">Offres</button>
       </nav>
 
       <div data-panneau="commandes">
@@ -73,9 +74,66 @@
           Aucun article dans la base : le site affiche ses trois pièces d'origine.
           <button class="bouton" id="importer-articles">Importer les pièces du site</button>
         </p>
+
+        <section class="carte sur-mesure" aria-labelledby="titre-sur-mesure">
+          <h2 id="titre-sur-mesure">Motif sur mesure</h2>
+          <p class="discret">Le client décrit son idée ou joint un modèle. Ces prix s'affichent dans le formulaire de commande.</p>
+          <form id="formulaire-sur-mesure">
+            <label class="case"><input type="checkbox" name="surMesure"> Proposé sur le site</label>
+            <label>Prix <input name="prixSurMesure" maxlength="60" placeholder="à partir de 7 500 XPF"></label>
+            <p class="discret">Pour une réduction sur le sur-mesure, crée une offre dans l'onglet « Offres ».</p>
+            <div class="actions">
+              <span class="message" id="message-sur-mesure" role="status"></span>
+              <button type="submit" class="bouton bouton-plein">Enregistrer</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <div data-panneau="offres" hidden>
+        <div class="outils">
+          <p class="discret">Une offre baisse les prix d'un pourcentage pendant une période. Si deux offres visent la même pièce, la plus forte s'applique.</p>
+          <button class="bouton" id="ajouter-offre">+ Offre</button>
+        </div>
+        <div class="liste" id="liste-offres"></div>
+        <p class="vide" id="offres-vides" hidden>
+          Aucune offre pour l'instant : le site affiche les prix normaux.
+          <button class="bouton" id="recreer-lancement">Recréer l'offre de lancement</button>
+          <span class="discret">−33 % sur les pièces et −27 % sur le sur-mesure, jusqu'au 24 décembre. Tu pourras la modifier ensuite.</span>
+        </p>
       </div>
     </section>
   </main>
+
+  <!-- Fiche d'une offre -->
+  <dialog id="fiche-offre">
+    <form method="dialog" id="formulaire-offre">
+      <h2 id="titre-fiche-offre">Offre</h2>
+      <label>Nom (affiché sur le site) <input name="nom" required maxlength="60" placeholder="Offre de lancement"></label>
+      <div class="deux">
+        <label>Du <input name="debut" type="date" required></label>
+        <label>Au (compris) <input name="fin" type="date" required></label>
+      </div>
+      <label>Réduction (%) <input name="reduction" type="number" inputmode="numeric" min="1" max="90" step="1" required placeholder="20"></label>
+      <p class="discret" id="exemple-offre"></p>
+
+      <fieldset>
+        <legend>S'applique à</legend>
+        <label class="case"><input type="radio" name="pieces" value="toutes"> Toutes les pièces</label>
+        <label class="case"><input type="radio" name="pieces" value="choix"> Certaines pièces</label>
+        <div class="choix-articles" id="choix-articles"></div>
+        <label class="case"><input type="radio" name="pieces" value="aucune"> Aucune pièce</label>
+        <label class="case separe"><input type="checkbox" name="surMesure"> Et le motif sur mesure</label>
+      </fieldset>
+
+      <label class="case"><input type="checkbox" name="active"> Offre active</label>
+      <p class="message" id="message-offre" role="status"></p>
+      <div class="actions">
+        <button type="button" class="bouton" data-fermer>Annuler</button>
+        <button type="submit" class="bouton bouton-plein">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Fiche d'un article -->
   <dialog id="fiche-article">
@@ -83,10 +141,7 @@
       <h2 id="titre-fiche-article">Article</h2>
       <label>Nom <input name="titre" required maxlength="80"></label>
       <label>Description courte <input name="note" maxlength="160" placeholder="Javel sur coton noir · face et dos"></label>
-      <div class="deux">
-        <label>Prix normal <input name="prix" maxlength="40" placeholder="7 500 XPF"></label>
-        <label>Prix de lancement <input name="prixLancement" maxlength="40" placeholder="5 000 XPF"></label>
-      </div>
+      <label>Prix <input name="prix" maxlength="40" placeholder="6 000 XPF"></label>
       <label class="case"><input type="checkbox" name="visible"> En ligne sur le site</label>
 
       <fieldset>

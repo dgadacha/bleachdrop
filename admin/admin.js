@@ -6,7 +6,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 import {
   getFirestore, collection, doc, onSnapshot, query, orderBy, limit, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  writeBatch, serverTimestamp, connectFirestoreEmulator,
+  writeBatch, serverTimestamp, setDoc, connectFirestoreEmulator,
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
 // Configuration publique du projet Firebase (aucun secret ici).
@@ -31,7 +31,7 @@ const PIECES_DU_SITE = [
   { titre: 'Spider-Man', note: 'Javel sur coton noir · face et dos', photos: [{ fichier: 'images/araignee-face.webp', legende: 'Face' }, { fichier: 'images/araignee-dos.webp', legende: 'Dos' }] },
   { titre: 'Centipede', note: 'Javel sur coton noir · face et dos', photos: [{ fichier: 'images/centipede-face.webp', legende: 'Face' }, { fichier: 'images/centipede-dos.webp', legende: 'Dos' }] },
   { titre: 'Magma', note: 'Javel sur coton noir · effet délavé, face et dos', photos: [{ fichier: 'images/magma-face.webp', legende: 'Face' }, { fichier: 'images/magma-dos.webp', legende: 'Dos' }] },
-].map((piece) => ({ ...piece, prix: '7 500 XPF', prixLancement: '5 000 XPF', visible: true }));
+].map((piece) => ({ ...piece, prix: '6 000 XPF', visible: true }));
 
 const STATUTS = { nouvelle: 'Nouvelle', acceptee: 'Acceptée', 'en-cours': 'En fabrication', remise: 'Remise', annulee: 'Annulée' };
 const PAIEMENTS = ['', 'Espèces', 'Virement', 'Autre'];
@@ -85,7 +85,7 @@ onAuthStateChanged(auth, async (compte) => {
     return;
   }
   montrer('ecran-admin');
-  arreter = [ecouterCommandes(), ecouterArticles()];
+  arreter = [ecouterCommandes(), ecouterArticles(), ecouterSurMesure(), ecouterOffres()];
 });
 
 // ============================================================
@@ -257,7 +257,7 @@ function dessinerArticles() {
     <div class="article-infos">
       <strong>${echapper(a.titre)}</strong>
       <span class="discret">${echapper(a.note || '')}</span>
-      <span>${echapper(a.prix || 'Prix sur demande')}${a.prixLancement ? ` · lancement ${echapper(a.prixLancement)}` : ''}</span>
+      <span>${echapper(a.prix || 'Prix sur demande')}</span>
       <span><span class="etiquette${a.visible ? ' forte' : ''}">${a.visible ? 'En ligne' : 'Masqué'}</span> <span class="discret">${(a.photos || []).length} photo(s)</span></span>
     </div>
     <div class="article-actions">
@@ -274,6 +274,8 @@ function dessinerArticles() {
     const photos = [...(a.photos || [])].sort((p, q) => (q.legende === 'Dos') - (p.legende === 'Dos'));
     remplirImages(carte, photos);
   });
+  // Les offres citent les articles par leur nom : on les redessine aussi.
+  if (typeof dessinerOffres === 'function') dessinerOffres();
 }
 
 async function supprimerPhotos(photos) {
@@ -308,6 +310,46 @@ $('importer-articles').addEventListener('click', async () => {
   await lot.commit().catch(() => alert('Import impossible.'));
 });
 
+// ---------- Motif sur mesure (document reglages/site)
+// Valeurs du site tant que rien n'a été enregistré dans la base.
+const SUR_MESURE_PAR_DEFAUT = { surMesure: true, prixSurMesure: 'à partir de 7 500 XPF' };
+let surMesureModifie = false;
+
+function ecouterSurMesure() {
+  const f = $('formulaire-sur-mesure');
+  return onSnapshot(doc(db, 'reglages', 'site'), (instantane) => {
+    if (surMesureModifie) return; // on n'écrase pas une saisie en cours
+    const r = { ...SUR_MESURE_PAR_DEFAUT, ...(instantane.exists() ? instantane.data() : {}) };
+    f.surMesure.checked = Boolean(r.surMesure);
+    f.prixSurMesure.value = r.prixSurMesure || '';
+    if (!instantane.exists()) $('message-sur-mesure').textContent = 'Valeurs actuelles du site, pas encore enregistrées ici.';
+  });
+}
+
+$('formulaire-sur-mesure').addEventListener('input', () => {
+  surMesureModifie = true;
+  $('message-sur-mesure').textContent = 'Modifications non enregistrées';
+});
+
+$('formulaire-sur-mesure').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const bouton = f.querySelector('[type="submit"]');
+  bouton.disabled = true;
+  try {
+    await setDoc(doc(db, 'reglages', 'site'), {
+      surMesure: f.surMesure.checked,
+      prixSurMesure: f.prixSurMesure.value.trim(),
+    }, { merge: true });
+    surMesureModifie = false;
+    $('message-sur-mesure').textContent = 'Enregistré. Visible sur le site au prochain chargement.';
+  } catch (erreur) {
+    $('message-sur-mesure').textContent = 'Non enregistré. Réessaie.';
+  } finally {
+    bouton.disabled = false;
+  }
+});
+
 // ---------- Fiche d'un article
 let fiche = null; // { id, photos, ajoutees: [photoId], retirees: [photo] }
 
@@ -320,7 +362,6 @@ function ouvrirArticle(article) {
   f.titre.value = article ? article.titre : '';
   f.note.value = article ? article.note || '' : '';
   f.prix.value = article ? article.prix || '' : '';
-  f.prixLancement.value = article ? article.prixLancement || '' : '';
   f.visible.checked = article ? Boolean(article.visible) : true;
   dessinerPhotosFiche();
   $('fiche-article').showModal();
@@ -396,7 +437,7 @@ $('formulaire-article').addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target;
   const donnees = {
-    titre: f.titre.value.trim(), note: f.note.value.trim(), prix: f.prix.value.trim(), prixLancement: f.prixLancement.value.trim(),
+    titre: f.titre.value.trim(), note: f.note.value.trim(), prix: f.prix.value.trim(),
     visible: f.visible.checked,
     photos: fiche.photos.map((p) => (p.fichier ? { fichier: p.fichier, legende: p.legende || '' } : { photoId: p.photoId, legende: p.legende || '' })),
   };
@@ -421,4 +462,151 @@ $('fiche-article').addEventListener('close', () => {
   if (!fiche) return;
   supprimerPhotos(fiche.ajoutees.map((photoId) => ({ photoId })));
   fiche = null;
+});
+
+// ============================================================
+//  Offres
+// ============================================================
+// Dates en jours entiers, heure de Nouméa (UTC+11, sans heure d'été), comme sur le site.
+const JOUR = 86400000;
+const aujourdhui = () => new Date(Date.now() + 11 * 3600000).toISOString().slice(0, 10);
+const debutOffre = (o) => Date.parse(`${o.debut}T00:00:00+11:00`);
+const finOffre = (o) => Date.parse(`${o.fin}T00:00:00+11:00`) + JOUR;
+const dateCourte = (jour) => new Date(`${jour}T12:00:00+11:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Pacific/Noumea' });
+
+function etatOffre(o) {
+  if (!o.active) return ['Désactivée', false];
+  if (Date.now() < debutOffre(o)) return ['À venir', false];
+  if (Date.now() >= finOffre(o)) return ['Terminée', false];
+  return ['En cours', true];
+}
+
+function cibleOffre(o) {
+  const morceaux = [];
+  if (o.pieces === 'toutes') morceaux.push('toutes les pièces');
+  if (o.pieces === 'choix') {
+    const noms = (o.articles || []).map((id) => (articles.find((a) => a.id === id) || {}).titre).filter(Boolean);
+    morceaux.push(noms.length ? noms.join(', ') : 'aucune pièce choisie');
+  }
+  if (o.surMesure) morceaux.push('motif sur mesure');
+  return morceaux.join(' + ') || 'rien';
+}
+
+// Même calcul que le site : arrondi à 100 XPF.
+const reduire = (montant, pourcentage) => Math.round((montant * (100 - pourcentage)) / 100 / 100) * 100;
+
+let offres = [];
+
+function ecouterOffres() {
+  return onSnapshot(query(collection(db, 'offres'), orderBy('debut', 'desc')), (instantane) => {
+    offres = instantane.docs.map((d) => ({ id: d.id, ...d.data() }));
+    dessinerOffres();
+  });
+}
+
+function dessinerOffres() {
+  $('offres-vides').hidden = offres.length > 0;
+  $('liste-offres').innerHTML = offres.map((o) => {
+    const [etat, enCours] = etatOffre(o);
+    return `<article class="carte offre" data-id="${echapper(o.id)}">
+      <div class="offre-tete">
+        <strong>${echapper(o.nom)}</strong>
+        <span class="etiquette${enCours ? ' forte' : ''}">${etat}</span>
+        <span class="taux">−${echapper(o.reduction)} %</span>
+      </div>
+      <span>Du ${echapper(dateCourte(o.debut))} au ${echapper(dateCourte(o.fin))}</span>
+      <span class="discret">Sur : ${echapper(cibleOffre(o))}</span>
+      <div class="article-actions">
+        <button class="lien" data-action="modifier">Modifier</button>
+        <button class="lien" data-action="active">${o.active ? 'Désactiver' : 'Activer'}</button>
+        <button class="lien danger pousse" data-action="supprimer">Supprimer</button>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+$('liste-offres').addEventListener('click', async (e) => {
+  const action = e.target.dataset.action;
+  if (!action) return;
+  const o = offres.find((x) => x.id === e.target.closest('[data-id]').dataset.id);
+  if (action === 'modifier') ouvrirOffre(o);
+  if (action === 'active') await updateDoc(doc(db, 'offres', o.id), { active: !o.active }).catch(() => alert('Modification impossible.'));
+  if (action === 'supprimer') {
+    if (!confirm(`Supprimer définitivement l'offre « ${o.nom} » ?\nPour l'arrêter sans la perdre, utilise plutôt « Désactiver ».`)) return;
+    await deleteDoc(doc(db, 'offres', o.id)).catch(() => alert('Suppression impossible.'));
+  }
+});
+
+// Recrée l'offre de lancement telle qu'elle était sur le site avant cet écran.
+$('recreer-lancement').addEventListener('click', async () => {
+  const commun = { nom: 'Offre de lancement', debut: aujourdhui(), fin: '2026-12-24', articles: [], active: true, creeLe: serverTimestamp() };
+  const lot = writeBatch(db);
+  lot.set(doc(collection(db, 'offres')), { ...commun, reduction: 33, pieces: 'toutes', surMesure: false });
+  lot.set(doc(collection(db, 'offres')), { ...commun, reduction: 27, pieces: 'aucune', surMesure: true });
+  await lot.commit().catch(() => alert('Création impossible.'));
+});
+
+// ---------- Fiche d'une offre
+let offreOuverte = null;
+
+function ouvrirOffre(o) {
+  const f = $('formulaire-offre');
+  f.reset();
+  offreOuverte = o ? o.id : null;
+  $('titre-fiche-offre').textContent = o ? 'Modifier l\'offre' : 'Nouvelle offre';
+  $('message-offre').textContent = '';
+  f.nom.value = o ? o.nom : '';
+  f.debut.value = o ? o.debut : aujourdhui();
+  f.fin.value = o ? o.fin : '';
+  f.reduction.value = o ? o.reduction : '';
+  f.pieces.value = o ? o.pieces || 'toutes' : 'toutes';
+  f.surMesure.checked = o ? Boolean(o.surMesure) : false;
+  f.active.checked = o ? Boolean(o.active) : true;
+  const choisis = o ? o.articles || [] : [];
+  $('choix-articles').innerHTML = articles.length
+    ? articles.map((a) => `<label class="case"><input type="checkbox" name="article" value="${echapper(a.id)}"${choisis.includes(a.id) ? ' checked' : ''}> ${echapper(a.titre)}${a.visible ? '' : ' <span class="discret">(masqué)</span>'}</label>`).join('')
+    : '<p class="discret">Aucun article dans la base.</p>';
+  majFicheOffre();
+  $('fiche-offre').showModal();
+}
+$('ajouter-offre').addEventListener('click', () => ouvrirOffre(null));
+
+// Les cases des pièces ne servent que pour « Certaines pièces » ; l'exemple montre l'effet du pourcentage.
+function majFicheOffre() {
+  const f = $('formulaire-offre');
+  const choix = f.pieces.value === 'choix';
+  $('choix-articles').hidden = !choix;
+  const taux = Number(f.reduction.value);
+  $('exemple-offre').textContent = taux >= 1 && taux <= 90
+    ? `Exemple : 6 000 XPF deviennent ${reduire(6000, taux).toLocaleString('fr-FR')} XPF (arrondi à 100 XPF).`
+    : '';
+}
+$('formulaire-offre').addEventListener('input', majFicheOffre);
+$('formulaire-offre').addEventListener('change', majFicheOffre);
+
+$('formulaire-offre').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const reduction = Number(f.reduction.value);
+  const articlesChoisis = [...f.querySelectorAll('input[name="article"]:checked')].map((c) => c.value);
+  const message = (texte) => { $('message-offre').textContent = texte; };
+  if (!f.nom.value.trim()) return message('Donne un nom à l\'offre.');
+  if (!f.debut.value || !f.fin.value) return message('Indique les deux dates.');
+  if (f.fin.value < f.debut.value) return message('La date de fin doit venir après la date de début.');
+  if (!Number.isInteger(reduction) || reduction < 1 || reduction > 90) return message('La réduction doit être un nombre entier entre 1 et 90.');
+  if (f.pieces.value === 'choix' && !articlesChoisis.length) return message('Coche au moins une pièce, ou choisis une autre option.');
+  if (f.pieces.value === 'aucune' && !f.surMesure.checked) return message('L\'offre ne s\'applique à rien : choisis des pièces ou le motif sur mesure.');
+
+  const donnees = {
+    nom: f.nom.value.trim(), debut: f.debut.value, fin: f.fin.value, reduction,
+    pieces: f.pieces.value, articles: f.pieces.value === 'choix' ? articlesChoisis : [],
+    surMesure: f.surMesure.checked, active: f.active.checked,
+  };
+  try {
+    if (offreOuverte) await updateDoc(doc(db, 'offres', offreOuverte), donnees);
+    else await addDoc(collection(db, 'offres'), { ...donnees, creeLe: serverTimestamp() });
+    $('fiche-offre').close('enregistre');
+  } catch (erreur) {
+    message('L\'offre n\'a pas pu être enregistrée.');
+  }
 });

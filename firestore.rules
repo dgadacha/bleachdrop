@@ -25,6 +25,18 @@ service cloud.firestore {
       allow list, write: if estAdmin();
     }
 
+    // Offres (période et pourcentage) : lues par le site, gérées par les admins.
+    match /offres/{id} {
+      allow read: if true;
+      allow write: if estAdmin();
+    }
+
+    // Réglages du site (motif sur mesure…) : lus par le site, modifiés par les admins.
+    match /reglages/{id} {
+      allow get: if true;
+      allow list, write: if estAdmin();
+    }
+
     match /commandes/{id} {
       allow read, update, delete: if estAdmin();
       allow create: if estAdmin() || commandeDuSite();

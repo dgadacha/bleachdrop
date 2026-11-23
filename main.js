@@ -24,18 +24,22 @@ const REGLAGES = {
 
   tailles: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
 
-  // Offre de lancement : jusqu'à la date `fin`, chaque pièce est vendue
-  // à son `prixLancement`. Ensuite le prix normal revient tout seul.
-  // Mettre `fin: ''` pour arrêter l'offre tout de suite.
-  //  fin : ici le 25 décembre à minuit, heure de Nouméa.
-  promo: {
-    fin: '2026-12-25T00:00:00+11:00',
-    finTexte: 'avant le 25 décembre',
-  },
+  // Les offres se gèrent dans le back-office (onglet « Offres »).
+  // Celles-ci ne servent que si la base ne répond pas.
+  //  debut, fin : dates comprises, heure de Nouméa (AAAA-MM-JJ).
+  //  reduction  : en pourcentage. Le prix réduit est arrondi à 100 XPF.
+  //  pieces     : 'toutes', 'aucune' ou 'choix' (avec `articles`, la liste des identifiants).
+  //  surMesure  : true si l'offre s'applique aussi au motif sur mesure.
+  // Si plusieurs offres visent la même pièce, la plus forte s'applique (pas de cumul).
+  offres: [
+    { nom: 'Offre de lancement', debut: '2026-11-23', fin: '2026-12-24', reduction: 33, pieces: 'toutes', articles: [], surMesure: false, active: true },
+    { nom: 'Offre de lancement', debut: '2026-11-23', fin: '2026-12-24', reduction: 27, pieces: 'aucune', articles: [], surMesure: true, active: true },
+  ],
 
   // Tarif normal du motif sur mesure, affiché près du formulaire (vide = masqué).
-  prixSurMesure: 'à partir de 9 000 XPF',
-  prixSurMesureLancement: 'à partir de 6 500 XPF',
+  // Ces deux valeurs servent de secours : le back-office peut les remplacer.
+  surMesure: true, // false = le motif sur mesure n'est pas proposé
+  prixSurMesure: 'à partir de 7 500 XPF',
 
   // La photo montrée en premier dans la galerie, quand une pièce en a plusieurs.
   vueParDefaut: 'Dos',
@@ -46,10 +50,8 @@ const REGLAGES = {
   // Les pièces de la galerie.
   //  photos : une ou plusieurs images, avec une légende (Face, Dos…).
   //           Liste vide = un visuel provisoire est dessiné à la place.
-  //  prix          : prix normal, par ex. '7 500 XPF'. Vide = « Prix sur demande ».
-  //  prixLancement : prix pendant l'offre de lancement (vide = pas d'offre sur cette pièce).
-  //  prixNormal : prix affiché barré à côté (laisser vide pour ne rien barrer).
-  //  mention    : petit texte sous le prix, par ex. 'Prix de lancement'.
+  //  prix : prix normal, par ex. '6 000 XPF'. Vide = « Prix sur demande ».
+  //         Les offres en cours s'appliquent dessus toutes seules.
   pieces: [
     {
       titre: 'Spider-Man',
@@ -58,10 +60,7 @@ const REGLAGES = {
         { fichier: 'images/araignee-face.webp', legende: 'Face' },
         { fichier: 'images/araignee-dos.webp', legende: 'Dos' },
       ],
-      prix: '7 500 XPF',
-      prixLancement: '5 000 XPF',
-      prixNormal: '',
-      mention: '',
+      prix: '6 000 XPF',
     },
     {
       titre: 'Centipede',
@@ -70,10 +69,7 @@ const REGLAGES = {
         { fichier: 'images/centipede-face.webp', legende: 'Face' },
         { fichier: 'images/centipede-dos.webp', legende: 'Dos' },
       ],
-      prix: '7 500 XPF',
-      prixLancement: '5 000 XPF',
-      prixNormal: '',
-      mention: '',
+      prix: '6 000 XPF',
     },
     {
       titre: 'Magma',
@@ -82,10 +78,7 @@ const REGLAGES = {
         { fichier: 'images/magma-face.webp', legende: 'Face' },
         { fichier: 'images/magma-dos.webp', legende: 'Dos' },
       ],
-      prix: '7 500 XPF',
-      prixLancement: '5 000 XPF',
-      prixNormal: '',
-      mention: '',
+      prix: '6 000 XPF',
     },
   ],
 };
@@ -191,16 +184,13 @@ function visuelProvisoire(index) {
     + `</svg><span class="a-venir">Photo à venir</span>`;
 }
 
-// Le prix d'une pièce : prix de lancement pendant l'offre, prix normal sinon.
+// Le prix d'une pièce : barré et réduit si une offre est en cours.
 function baliseprix(piece) {
   if (!piece.prix) return '<strong>Prix sur demande</strong>';
-  if (promoActive() && piece.prixLancement) {
-    return `<s>${echapper(piece.prix)}</s> <strong>${echapper(piece.prixLancement)}</strong>`
-      + '<small>Prix de lancement</small>';
-  }
-  return (piece.prixNormal ? `<s>${echapper(piece.prixNormal)}</s> ` : '')
-    + `<strong>${echapper(piece.prix)}</strong>`
-    + (piece.mention ? `<small>${echapper(piece.mention)}</small>` : '');
+  const p = prixPour(piece);
+  if (!p.offre) return `<strong>${echapper(p.normal)}</strong>`;
+  return `<s>${echapper(p.normal)}</s> <strong>${echapper(p.actuel)}</strong>`
+    + `<small>−${p.offre.reduction} % jusqu'au ${echapper(dateCourte(p.offre.fin))}</small>`;
 }
 
 // Une photo vient soit d'un fichier du site (`fichier`), soit de la base
@@ -314,26 +304,79 @@ async function chargerArticles() {
     if (!reponse.ok) return;
     const articles = (await reponse.json())
       .filter((ligne) => ligne.document)
-      .map((ligne) => lireChamps(ligne.document.fields))
+      .map((ligne) => ({ id: ligne.document.name.split('/').pop(), ...lireChamps(ligne.document.fields) }))
       .filter((a) => a.titre)
       .sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
     if (!articles.length) return;
 
     REGLAGES.pieces = articles.map((a) => ({
+      id: a.id,
       titre: a.titre,
       note: a.note || '',
       prix: a.prix || '',
-      prixLancement: a.prixLancement || '',
       photos: (a.photos || []).filter((p) => p && (p.fichier || p.photoId)),
     }));
-    const choisie = document.getElementById('piece').value;
     poserAccueil();
     poserGalerie();
-    poserListes();
-    document.getElementById('piece').value = choisie;
+    redessinerListes();
+    poserPromo();
     chargerPhotos();
   } catch (erreur) {
     // Base injoignable : on garde les pièces écrites dans ce fichier.
+  }
+}
+
+// Réglages du motif sur mesure, modifiés dans le back-office.
+// Sans réponse de la base, le site garde les valeurs écrites dans REGLAGES.
+async function chargerReglages() {
+  try {
+    const reponse = await fetch(adresseBase('/reglages/site'));
+    if (!reponse.ok) return;
+    const r = lireChamps((await reponse.json()).fields);
+    if (typeof r.surMesure === 'boolean') REGLAGES.surMesure = r.surMesure;
+    if (typeof r.prixSurMesure === 'string') REGLAGES.prixSurMesure = r.prixSurMesure;
+    redessinerListes();
+    poserPromo();
+  } catch (erreur) {
+    // Base injoignable : on garde les réglages écrits dans ce fichier.
+  }
+}
+
+// Redessine la liste du formulaire en gardant le choix du visiteur.
+// Une valeur qui n'existe plus (pièce masquée, sur-mesure retiré) revient à « Choisir… ».
+function redessinerListes() {
+  const liste = document.getElementById('piece');
+  const choisie = liste.value;
+  poserListes();
+  liste.value = choisie;
+  if (liste.selectedIndex < 0) liste.value = '';
+}
+
+// Les offres actives de la base remplacent celles écrites dans REGLAGES.
+// Une base qui répond « aucune offre » retire bien toutes les offres.
+async function chargerOffres() {
+  try {
+    const reponse = await fetch(adresseBase(':runQuery'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: 'offres' }],
+          where: { fieldFilter: { field: { fieldPath: 'active' }, op: 'EQUAL', value: { booleanValue: true } } },
+        },
+      }),
+    });
+    if (!reponse.ok) return;
+    REGLAGES.offres = (await reponse.json())
+      .filter((ligne) => ligne.document)
+      .map((ligne) => lireChamps(ligne.document.fields))
+      .filter((o) => o.debut && o.fin && o.reduction > 0);
+    poserGalerie();
+    chargerPhotos();
+    redessinerListes();
+    poserPromo();
+  } catch (erreur) {
+    // Base injoignable : on garde les offres écrites dans ce fichier.
   }
 }
 
@@ -358,8 +401,13 @@ function chargerPhotos() {
 function poserListes() {
   const option = (valeur, texte = valeur) => `<option value="${echapper(valeur)}">${echapper(texte)}</option>`;
   document.getElementById('piece').innerHTML = option('', 'Choisir…')
-    + REGLAGES.pieces.map((p) => option(p.titre, p.prix ? `${p.titre} — ${prixActuel(p.prix, p.prixLancement)}` : p.titre)).join('')
-    + option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${prixActuel(REGLAGES.prixSurMesure, REGLAGES.prixSurMesureLancement)}` : SUR_MESURE);
+    + REGLAGES.pieces.map((p) => option(p.titre, p.prix ? `${p.titre} — ${prixPour(p).actuel}` : p.titre)).join('')
+    + (REGLAGES.surMesure
+      ? option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${prixPour(null).actuel}` : SUR_MESURE)
+      : '');
+  document.getElementById('intro-pieces').textContent = REGLAGES.surMesure
+    ? 'Commandez une pièce, ou demandez un motif rien que pour vous.'
+    : 'Choisissez votre pièce.';
   document.getElementById('taille').innerHTML = option('', 'Choisir…')
     + REGLAGES.tailles.map((t) => option(t)).join('');
 }
@@ -372,21 +420,72 @@ function poserPied() {
 }
 
 // ============================================================
-//  Offre de lancement
+//  Offres
 // ============================================================
-const promoActive = () => Boolean(REGLAGES.promo && REGLAGES.promo.fin)
-  && Date.now() < new Date(REGLAGES.promo.fin).getTime();
+// Les dates d'une offre sont des jours entiers à l'heure de Nouméa (UTC+11,
+// sans heure d'été) : du début à 0 h jusqu'à la fin de la journée de fin.
+const JOUR = 86400000;
+const debutOffre = (o) => Date.parse(`${o.debut}T00:00:00+11:00`);
+const finOffre = (o) => Date.parse(`${o.fin}T00:00:00+11:00`) + JOUR;
+const offreEnCours = (o) => o.active !== false && Date.now() >= debutOffre(o) && Date.now() < finOffre(o);
 
-// Le prix en vigueur aujourd'hui.
-const prixActuel = (normal, lancement) => (promoActive() && lancement ? lancement : normal);
+const dateLongue = (jour) => new Date(`${jour}T12:00:00+11:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', timeZone: 'Pacific/Noumea' });
+const dateCourte = (jour) => new Date(`${jour}T12:00:00+11:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', timeZone: 'Pacific/Noumea' });
+
+// L'offre vise-t-elle cette pièce ? `piece` vaut null pour le motif sur mesure.
+function offreVise(o, piece) {
+  if (!piece) return Boolean(o.surMesure);
+  if (o.pieces === 'toutes') return true;
+  return o.pieces === 'choix' && Boolean(piece.id) && (o.articles || []).includes(piece.id);
+}
+
+// Applique un pourcentage au montant écrit dans un texte, arrondi à 100 XPF :
+// '6 000 XPF' à −33 % donne '4 000 XPF' ; 'à partir de 7 500 XPF' à −27 % donne 'à partir de 5 500 XPF'.
+function reduire(texte, pourcentage) {
+  return texte.replace(/\d[\d\s  ]*\d|\d/, (nombre) => {
+    const montant = parseInt(nombre.replace(/\D/g, ''), 10);
+    const reduit = Math.round((montant * (100 - pourcentage)) / 100 / 100) * 100;
+    return String(reduit).replace(/\B(?=(\d{3})+$)/g, ' ');
+  });
+}
+
+// Le prix normal, le prix en vigueur et l'offre appliquée (la plus forte), pour une pièce ou le sur-mesure.
+function prixPour(piece) {
+  const normal = piece ? piece.prix : REGLAGES.prixSurMesure;
+  const offre = /\d/.test(normal || '')
+    ? REGLAGES.offres.filter((o) => offreEnCours(o) && offreVise(o, piece)).sort((a, b) => b.reduction - a.reduction)[0]
+    : undefined;
+  return { normal, actuel: offre ? reduire(normal, offre.reduction) : normal, offre };
+}
+
+// Ce que vise une offre, en clair, pour le bandeau.
+function cibleEnClair(o) {
+  const choisies = REGLAGES.pieces.filter((p) => offreVise(o, p)).map((p) => p.titre);
+  let pieces = '';
+  if (o.pieces === 'toutes') pieces = 'toutes les pièces';
+  else if (choisies.length) pieces = choisies.length <= 3 ? choisies.join(', ').replace(/, ([^,]*)$/, ' et $1') : 'une sélection de pièces';
+  if (o.pieces === 'toutes' && o.surMesure && REGLAGES.surMesure) return 'toute commande';
+  if (o.surMesure && REGLAGES.surMesure) return pieces ? `${pieces} et le motif sur mesure` : 'le motif sur mesure';
+  return pieces;
+}
 
 function poserPromo() {
-  const actif = promoActive();
+  const enCours = REGLAGES.offres.filter((o) => offreEnCours(o) && cibleEnClair(o));
+  let texte = '';
+  if (enCours.length === 1) {
+    const o = enCours[0];
+    texte = `${echapper(o.nom || 'Offre')} · <strong>−${o.reduction} %</strong> sur ${echapper(cibleEnClair(o))} jusqu'au ${echapper(dateLongue(o.fin))}`;
+  } else if (enCours.length > 1) {
+    const noms = [...new Set(enCours.map((o) => o.nom || 'Offre'))];
+    const max = Math.max(...enCours.map((o) => o.reduction));
+    // Une seule date de fin commune : on l'affiche. Sinon chaque pièce montre la sienne.
+    const fins = [...new Set(enCours.map((o) => o.fin))];
+    texte = `${echapper(noms.length === 1 ? noms[0] : 'Offres en cours')} · <strong>jusqu'à −${max} %</strong>`
+      + (fins.length === 1 ? ` jusqu'au ${echapper(dateLongue(fins[0]))}` : '');
+  }
   document.querySelectorAll('[data-promo]').forEach((el) => {
-    el.hidden = !actif;
-    if (actif) {
-      el.innerHTML = `Offre de lancement · <strong>prix réduits</strong> sur toute commande ${echapper(REGLAGES.promo.finTexte)}`;
-    }
+    el.hidden = !texte;
+    el.innerHTML = texte;
   });
 }
 
@@ -498,12 +597,10 @@ function brancherFormulaire() {
     };
 
     // Le prix vu par le client au moment de sa demande, pour que Maya le retrouve.
-    const fiche = REGLAGES.pieces.find((p) => p.titre === d.piece) || {};
-    const normal = d.piece === SUR_MESURE ? REGLAGES.prixSurMesure : fiche.prix;
-    const lancement = d.piece === SUR_MESURE ? REGLAGES.prixSurMesureLancement : fiche.prixLancement;
-    if (normal) {
-      const actuel = prixActuel(normal, lancement);
-      d.prix = actuel + (actuel !== normal ? ` (prix de lancement, prix normal ${normal})` : '');
+    const fiche = d.piece === SUR_MESURE ? null : REGLAGES.pieces.find((p) => p.titre === d.piece);
+    if (d.piece === SUR_MESURE || fiche) {
+      const p = prixPour(fiche);
+      if (p.normal) d.prix = p.actuel + (p.offre ? ` (${p.offre.nom || 'offre'} −${p.offre.reduction} %, prix normal ${p.normal})` : '');
     }
 
     const erreurs = verifier(d);
@@ -552,3 +649,5 @@ poserPromo();
 brancherGalerie();
 brancherFormulaire();
 chargerArticles();
+chargerReglages();
+chargerOffres();

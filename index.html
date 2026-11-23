@@ -8,18 +8,14 @@
   <meta name="theme-color" content="#000000">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Pirata+One&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-  <!-- Filtre partagé : bords irréguliers, comme une trace de javel -->
+  <!-- Forme du tee-shirt, pour les visuels provisoires -->
   <svg class="defs" aria-hidden="true" focusable="false">
     <defs>
-      <filter id="javel" x="-5%" y="-5%" width="110%" height="110%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="4" result="bruit"/>
-        <feDisplacementMap in="SourceGraphic" in2="bruit" scale="7" xChannelSelector="R" yChannelSelector="G"/>
-      </filter>
       <clipPath id="forme-tee">
         <path d="M140 60 Q200 104 260 60 L340 95 L385 190 L325 220 L310 185 L310 462 L90 462 L90 185 L75 220 L15 190 L60 95 Z"/>
       </clipPath>
@@ -27,8 +23,9 @@
   </svg>
 
   <header class="barre">
-    <a class="barre-nom" href="#haut"><img src="images/logo-petit.webp" alt="bleach drop" width="440" height="261"></a>
+    <a class="barre-nom" href="#haut"><img src="images/logo-petit.webp" alt="bleach drop" width="480" height="217"></a>
     <nav aria-label="Navigation principale">
+      <a href="#collections" data-lien-collections hidden>Collections</a>
       <a href="#pieces">Pièces</a>
       <a href="#demarche">Démarche</a>
       <a href="#commande">Commander</a>
@@ -42,7 +39,7 @@
       <div class="hero-texte">
         <p class="promo" data-promo hidden></p>
         <p class="sur-titre">Tee-shirts décolorés à la javel</p>
-        <h1><img src="images/logo.webp" alt="bleach drop" width="1902" height="1130" fetchpriority="high"></h1>
+        <h1><img src="images/logo.webp" alt="bleach drop" width="1600" height="722" fetchpriority="high"></h1>
         <p class="signature" data-signature></p>
         <p class="accroche">Dessinés à la main, un par un.<br>Aucune pièce n'est identique à une autre.</p>
         <div class="actions">
@@ -52,12 +49,32 @@
       </div>
     </section>
 
+    <!-- Bandeau qui défile (décoratif) -->
+    <div class="defilant" aria-hidden="true">
+      <div class="defilant-piste">
+        <span>Fait main</span><span>Pièces uniques</span><span>Javel sur coton noir</span><span>Nouvelle-Calédonie</span>
+        <span>Fait main</span><span>Pièces uniques</span><span>Javel sur coton noir</span><span>Nouvelle-Calédonie</span>
+      </div>
+    </div>
+
+    <!-- Collections : affichée seulement s'il y en a (back-office, onglet « Collections ») -->
+    <section class="section" id="collections" hidden>
+      <header class="section-tete">
+        <span class="numero">01</span>
+        <h2>Collections</h2>
+        <p>Chaque drop est une série limitée, en vente pour un temps. Les collections permanentes restent disponibles.</p>
+      </header>
+      <div class="decompte" id="decompte" hidden></div>
+      <div class="collections" id="liste-collections"></div>
+    </section>
+
     <section class="section" id="pieces">
       <header class="section-tete">
         <span class="numero">01</span>
         <h2>Pièces</h2>
         <p id="intro-pieces">Commandez une pièce, ou demandez un motif rien que pour vous.</p>
       </header>
+      <div class="filtres-pieces" id="filtres-pieces" role="toolbar" aria-label="Filtrer par collection" hidden></div>
       <div class="galerie" id="galerie"></div>
     </section>
 
@@ -130,6 +147,12 @@
           <select id="taille" name="taille" required></select>
           <p class="erreur" data-erreur="taille"></p>
         </div>
+        <div class="champ">
+          <label for="code">Code promo (facultatif)</label>
+          <input id="code" name="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20">
+          <p class="discret-champ" id="etat-code" aria-live="polite"></p>
+          <p class="erreur" data-erreur="code"></p>
+        </div>
         <div class="champ champ-large">
           <label for="message">Message</label>
           <textarea id="message" name="message" rows="5" placeholder="Le motif que vous imaginez, la coupe, une question…"></textarea>
@@ -159,7 +182,7 @@
   </main>
 
   <footer class="pied">
-    <span class="pied-marque"><img src="images/logo-petit.webp" alt="bleach drop" width="440" height="261" loading="lazy"> <small data-signature></small></span>
+    <span class="pied-marque"><img src="images/logo-petit.webp" alt="bleach drop" width="480" height="217" loading="lazy"> <small data-signature></small></span>
     <span id="liens-pied"></span>
     <span>Fait main · Pièces uniques</span>
     <span><a href="/mentions-legales.html">Mentions légales et confidentialité</a></span>

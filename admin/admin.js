@@ -8,6 +8,7 @@ import {
   getFirestore, collection, doc, onSnapshot, query, orderBy, limit, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   writeBatch, serverTimestamp, setDoc, arrayUnion, Timestamp, connectFirestoreEmulator,
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { brancherStencil } from './stencil.js';
 
 // Configuration publique du projet Firebase (aucun secret ici).
 const app = initializeApp({
@@ -25,6 +26,7 @@ if (EMULATEUR) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8085);
 }
+const stencil = brancherStencil(db);
 
 // Les trois pièces d'origine du site, pour remplir la base la première fois.
 const PIECES_DU_SITE = [
@@ -71,6 +73,7 @@ let arreter = [];
 onAuthStateChanged(auth, async (compte) => {
   arreter.forEach((stop) => stop());
   arreter = [];
+  stencil.arreter();
   $('deconnexion').hidden = !compte;
   if (!compte) { montrer('ecran-connexion'); return; }
 
@@ -84,7 +87,9 @@ onAuthStateChanged(auth, async (compte) => {
     return;
   }
   montrer('ecran-admin');
-  arreter = [ecouterCommandes(), ecouterArticles(), ecouterSurMesure(), ecouterOffres()];
+  arreter = [ecouterCommandes(), ecouterArticles(), ecouterCollections(), ecouterSurMesure(), ecouterOffres(), ecouterCodes()];
+  // Les pochoirs pèsent lourd : chargés seulement quand on ouvre l'onglet.
+  if (document.querySelector('[data-onglet="stencil"]').getAttribute('aria-selected') === 'true') stencil.ouvrir();
 });
 
 // ============================================================
@@ -93,6 +98,7 @@ onAuthStateChanged(auth, async (compte) => {
 document.querySelectorAll('[data-onglet]').forEach((bouton) => bouton.addEventListener('click', () => {
   document.querySelectorAll('[data-onglet]').forEach((b) => b.setAttribute('aria-selected', String(b === bouton)));
   document.querySelectorAll('[data-panneau]').forEach((p) => { p.hidden = p.dataset.panneau !== bouton.dataset.onglet; });
+  if (bouton.dataset.onglet === 'stencil') stencil.ouvrir();
 }));
 document.querySelectorAll('[data-fermer]').forEach((bouton) => bouton.addEventListener('click', () => bouton.closest('dialog').close('annule')));
 
@@ -170,6 +176,7 @@ function dessinerCommandes() {
   $('liste-commandes').innerHTML = visibles.length ? visibles.map(carteCommande).join('')
     : '<p class="vide">Aucune commande à cette étape.</p>';
   remplirModeles();
+  if (typeof dessinerCodes === 'function' && typeof codes !== 'undefined') dessinerCodes();
 }
 
 $('filtres-commandes').addEventListener('click', (e) => {
@@ -222,6 +229,10 @@ function carteCommande(c) {
   if (c.remisePrevue && ['validee', 'realisation', 'prete'].includes(etape.id) && c.remisePrevue < new Date(Date.now() + 11 * 3600000).toISOString().slice(0, 10)) alerte = 'Date de remise dépassée';
 
   const emailValable = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email || '');
+  // Le même client a-t-il déjà utilisé ce code sur une commande plus ancienne ?
+  const dejaUtilise = c.code && commandes.find((x) => x.id !== c.id && x.code === c.code
+    && String(x.email || '').toLowerCase() === String(c.email || '').toLowerCase()
+    && etapeDe(x).id !== 'annulee' && (x.creeLe?.seconds || 0) < (c.creeLe?.seconds || 0));
   const reponses = (c.reponses || []).map((r) => `<li>Réponse envoyée le ${echapper(dateCourteFr(r.le))} : ${echapper(xpf(r.prix))} · ${echapper(r.delai)}</li>`).join('');
   return `<article class="carte etape-${etape.id}" data-id="${echapper(c.id)}">
     <div class="carte-tete">
@@ -229,10 +240,12 @@ function carteCommande(c) {
       <strong>${echapper(c.nom)}</strong>
       <span>${echapper(c.piece)} · ${echapper(c.taille)}</span>
       ${c.source === 'manuel' ? '<span class="etiquette">À la main</span>' : ''}
+      ${c.code ? `<span class="etiquette">Code ${echapper(c.code)} −${echapper(c.codeReduction)} %</span>` : ''}
       ${c.modeleJoint && !c.modeleId ? '<span class="etiquette">Modèle joint : voir l\'e-mail</span>' : ''}
       <span class="date">${echapper(date)}</span>
     </div>
     ${alerte ? `<p class="alerte">${echapper(alerte)}</p>` : ''}
+    ${dejaUtilise ? `<p class="alerte">Ce client a déjà utilisé le code ${echapper(c.code)} (commande du ${echapper(dateCourteFr(dejaUtilise.creeLe))})</p>` : ''}
     <ol class="fil">${filEtapes(c)}</ol>
     <div class="carte-corps">
       ${contact || tel ? `<span>${[contact, tel].filter(Boolean).join(' · ')}</span>` : ''}
@@ -452,7 +465,7 @@ function dessinerArticles() {
       <strong>${echapper(a.titre)}</strong>
       <span class="discret">${echapper(a.note || '')}</span>
       <span>${echapper(a.prix || 'Prix sur demande')}</span>
-      <span><span class="etiquette${a.visible ? ' forte' : ''}">${a.visible ? 'En ligne' : 'Masqué'}</span> <span class="discret">${(a.photos || []).length} photo(s)</span></span>
+      <span><span class="etiquette${a.visible ? ' forte' : ''}">${a.visible ? 'En ligne' : 'Masqué'}</span>${nomCollection(a.collection) ? ` <span class="etiquette nom-drop">${echapper(nomCollection(a.collection))}</span>` : ''} <span class="discret">${(a.photos || []).length} photo(s)</span></span>
     </div>
     <div class="article-actions">
       <button class="lien" data-action="modifier">Modifier</button>
@@ -468,8 +481,9 @@ function dessinerArticles() {
     const photos = [...(a.photos || [])].sort((p, q) => (q.legende === 'Dos') - (p.legende === 'Dos'));
     remplirImages(carte, photos);
   });
-  // Les offres citent les articles par leur nom : on les redessine aussi.
+  // Les offres et les collections citent les articles par leur nom : on les redessine aussi.
   if (typeof dessinerOffres === 'function') dessinerOffres();
+  if (typeof dessinerCollections === 'function') dessinerCollections();
 }
 
 async function supprimerPhotos(photos) {
@@ -557,6 +571,8 @@ function ouvrirArticle(article) {
   f.note.value = article ? article.note || '' : '';
   f.prix.value = article ? article.prix || '' : '';
   f.visible.checked = article ? Boolean(article.visible) : true;
+  f.collection.innerHTML = `<option value="">Aucune : toujours en vente</option>${collections.map((c) => `<option value="${echapper(c.id)}">${echapper(c.nom)}</option>`).join('')}`;
+  f.collection.value = article && collections.some((c) => c.id === article.collection) ? article.collection : '';
   dessinerPhotosFiche();
   $('fiche-article').showModal();
 }
@@ -633,6 +649,7 @@ $('formulaire-article').addEventListener('submit', async (e) => {
   const donnees = {
     titre: f.titre.value.trim(), note: f.note.value.trim(), prix: f.prix.value.trim(),
     visible: f.visible.checked,
+    collection: f.collection.value,
     photos: fiche.photos.map((p) => (p.fichier ? { fichier: p.fichier, legende: p.legende || '' } : { photoId: p.photoId, legende: p.legende || '' })),
   };
   if (!donnees.titre) { $('message-article').textContent = 'Donne un nom à l\'article.'; return; }
@@ -657,6 +674,190 @@ $('fiche-article').addEventListener('close', () => {
   supprimerPhotos(fiche.ajoutees.map((photoId) => ({ photoId })));
   fiche = null;
 });
+
+// ============================================================
+//  Collections
+// ============================================================
+// Limitée : en vente du lancement à la fin (dates et heures de Nouméa,
+// 'AAAA-MM-JJTHH:MM'). Avant, ses pièces sont cachées et la prochaine affiche
+// un décompte sur le site. Permanente : toujours en vente, sans dates.
+let collections = [];
+const momentNC = (texte) => (texte ? Date.parse(`${texte}:00+11:00`) : NaN);
+const dateHeure = (texte) => new Date(momentNC(texte)).toLocaleString('fr-FR', {
+  weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Pacific/Noumea',
+});
+const nomCollection = (id) => (id ? (collections.find((c) => c.id === id) || {}).nom || '' : '');
+// Tri naturel : DROP 2 avant DROP 10.
+const parNom = (a, b) => String(a.nom).localeCompare(String(b.nom), 'fr', { numeric: true });
+
+function delaiEnClair(ms) {
+  const minutes = Math.max(1, Math.round(ms / 60000));
+  const j = Math.floor(minutes / 1440); const h = Math.floor((minutes % 1440) / 60); const m = minutes % 60;
+  if (j) return `${j} j ${h} h`;
+  if (h) return `${h} h ${String(m).padStart(2, '0')}`;
+  return `${m} min`;
+}
+
+function etatCollection(c) {
+  if (c.type === 'permanente') return c.visible ? ['Permanente', 'permanente'] : ['Masquée', 'masquee'];
+  if (!c.visible) return ['Masquée', 'masquee'];
+  const maintenant = Date.now();
+  if (maintenant < momentNC(c.debut)) return ['À venir', 'avenir'];
+  if (maintenant >= momentNC(c.fin)) return ['Terminée', 'fin'];
+  return ['En cours', 'encours'];
+}
+
+// La seule collection dont le site affiche le décompte : la prochaine limitée programmée.
+function prochaineCollection() {
+  return collections.filter((c) => etatCollection(c)[1] === 'avenir').sort((a, b) => momentNC(a.debut) - momentNC(b.debut))[0];
+}
+
+function ecouterCollections() {
+  return onSnapshot(collection(db, 'collections'), (instantane) => {
+    collections = instantane.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => {
+      // Limitées d'abord, de la plus récente à la plus ancienne ; puis les permanentes par nom.
+      if ((a.type === 'permanente') !== (b.type === 'permanente')) return a.type === 'permanente' ? 1 : -1;
+      return a.type === 'permanente' ? parNom(a, b) : momentNC(b.debut) - momentNC(a.debut);
+    });
+    dessinerArticles();
+  });
+}
+
+function dessinerCollections() {
+  if (!$('liste-collections')) return;
+  $('collections-vides').hidden = collections.length > 0;
+  const prochaine = prochaineCollection();
+  $('liste-collections').innerHTML = collections.map((c) => {
+    const [etat, cle] = etatCollection(c);
+    const pieces = articles.filter((a) => a.collection === c.id);
+    const masquees = pieces.filter((a) => !a.visible).length;
+    let quand = '';
+    if (c.type !== 'permanente') {
+      quand = `Du ${dateHeure(c.debut)} au ${dateHeure(c.fin)}`;
+      if (cle === 'avenir') quand += ` · lancement dans ${delaiEnClair(momentNC(c.debut) - Date.now())}`;
+      if (cle === 'encours') quand += ` · fin dans ${delaiEnClair(momentNC(c.fin) - Date.now())}`;
+    }
+    const remarques = [];
+    if (prochaine && prochaine.id === c.id) remarques.push('Le site affiche son décompte de lancement.');
+    else if (cle === 'avenir') remarques.push('Programmée après une autre : son décompte s\'affichera quand son tour viendra.');
+    if (masquees) remarques.push(`${masquees} pièce${masquees > 1 ? 's sont masquées' : ' est masquée'} (onglet Articles) : elle${masquees > 1 ? 's' : ''} n'apparaîtr${masquees > 1 ? 'ont' : 'a'} pas sur le site.`);
+    return `<article class="carte offre" data-collection="${echapper(c.id)}">
+      <div class="offre-tete">
+        <strong class="nom-collection">${echapper(c.nom)}</strong>
+        <span class="etiquette${['encours', 'permanente'].includes(cle) || (prochaine && prochaine.id === c.id) ? ' forte' : ''}">${etat}</span>
+        ${c.type === 'permanente' ? '' : '<span class="discret">Limitée</span>'}
+      </div>
+      ${c.description ? `<span class="discret">${echapper(c.description)}</span>` : ''}
+      ${quand ? `<span>${echapper(quand)}</span>` : ''}
+      <span>${pieces.length ? `${pieces.length} pièce${pieces.length > 1 ? 's' : ''} : ${pieces.map((a) => echapper(a.titre)).join(', ')}` : 'Aucune pièce pour l\'instant'}</span>
+      ${remarques.map((r) => `<span class="discret">${echapper(r)}</span>`).join('')}
+      <div class="article-actions">
+        <button class="lien" data-action-collection="modifier">Modifier</button>
+        <button class="lien" data-action-collection="visible">${c.visible ? 'Masquer' : 'Afficher sur le site'}</button>
+        <button class="lien danger pousse" data-action-collection="supprimer">Supprimer</button>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+$('liste-collections').addEventListener('click', async (e) => {
+  const action = e.target.dataset.actionCollection;
+  if (!action) return;
+  const c = collections.find((x) => x.id === e.target.closest('[data-collection]').dataset.collection);
+  if (!c) return;
+  if (action === 'modifier') ouvrirCollection(c);
+  if (action === 'visible') await updateDoc(doc(db, 'collections', c.id), { visible: !c.visible }).catch(() => alert('Modification impossible.'));
+  if (action === 'supprimer') {
+    const pieces = articles.filter((a) => a.collection === c.id);
+    if (!confirm(`Supprimer la collection ${c.nom} ?${pieces.length ? `\nSes ${pieces.length} pièce(s) restent dans Articles, hors collection : en ligne, elles seront toujours en vente.` : ''}`)) return;
+    const lot = writeBatch(db);
+    lot.delete(doc(db, 'collections', c.id));
+    pieces.forEach((a) => lot.update(doc(db, 'articles', a.id), { collection: '' }));
+    await lot.commit().catch(() => alert('Suppression impossible.'));
+  }
+});
+
+// ---------- Fiche d'une collection
+let collectionOuverte = null;
+
+// « DROP 003 » si la dernière s'appelle « DROP 002 ».
+function prochainNom() {
+  const numeros = collections.map((c) => (String(c.nom).match(/drop\s*0*(\d+)/i) || [])[1]).filter(Boolean).map(Number);
+  return `DROP ${String((numeros.length ? Math.max(...numeros) : 0) + 1).padStart(3, '0')}`;
+}
+
+// 'AAAA-MM-JJTHH:MM' à l'heure de Nouméa, dans `jours` jours à `heure` h.
+function momentDans(jours, heure) {
+  const date = new Date(Date.now() + 11 * 3600000 + jours * JOUR).toISOString().slice(0, 10);
+  return `${date}T${String(heure).padStart(2, '0')}:00`;
+}
+
+function majTypeCollection() {
+  const f = $('formulaire-collection');
+  const limitee = f.type.value !== 'permanente';
+  $('dates-collection').hidden = !limitee;
+  $('aide-dates-collection').hidden = !limitee;
+}
+$('formulaire-collection').addEventListener('change', (e) => { if (e.target.name === 'type') majTypeCollection(); });
+
+function ouvrirCollection(c) {
+  const f = $('formulaire-collection');
+  f.reset();
+  collectionOuverte = c ? c.id : null;
+  $('titre-fiche-collection').textContent = c ? `Modifier ${c.nom}` : 'Nouvelle collection';
+  $('message-collection').textContent = '';
+  f.nom.value = c ? c.nom : prochainNom();
+  f.description.value = c ? c.description || '' : '';
+  f.type.value = c && c.type === 'permanente' ? 'permanente' : 'limitee';
+  f.debut.value = c && c.debut ? c.debut : momentDans(7, 18);
+  f.fin.value = c && c.fin ? c.fin : momentDans(21, 23).replace('T23:00', 'T23:59');
+  f.visible.checked = c ? Boolean(c.visible) : true;
+  $('choix-pieces-collection').innerHTML = articles.length ? articles.map((a) => {
+    const ailleurs = a.collection && a.collection !== collectionOuverte ? nomCollection(a.collection) : '';
+    const details = [ailleurs ? `dans ${ailleurs}` : '', a.visible ? '' : 'masquée'].filter(Boolean).join(' · ');
+    return `<label class="case"><input type="checkbox" value="${echapper(a.id)}"${c && a.collection === c.id ? ' checked' : ''}> ${echapper(a.titre)}${details ? ` <span class="discret">(${echapper(details)})</span>` : ''}</label>`;
+  }).join('') : '<p class="discret">Aucun article pour l\'instant : crée-les dans l\'onglet Articles.</p>';
+  majTypeCollection();
+  $('fiche-collection').showModal();
+}
+$('ajouter-collection').addEventListener('click', () => ouvrirCollection(null));
+
+$('formulaire-collection').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const message = (texte) => { $('message-collection').textContent = texte; };
+  const type = f.type.value === 'permanente' ? 'permanente' : 'limitee';
+  const donnees = {
+    nom: f.nom.value.trim().slice(0, 40),
+    description: f.description.value.trim().slice(0, 160),
+    type,
+    debut: type === 'limitee' ? f.debut.value : '',
+    fin: type === 'limitee' ? f.fin.value : '',
+    visible: f.visible.checked,
+  };
+  if (!donnees.nom) return message('Donne un nom à la collection.');
+  if (type === 'limitee') {
+    if (!donnees.debut || !donnees.fin) return message('Une collection limitée a une date de lancement et une date de fin.');
+    if (momentNC(donnees.fin) <= momentNC(donnees.debut)) return message('La fin doit venir après le lancement.');
+  }
+  const choisies = new Set([...$('choix-pieces-collection').querySelectorAll('input:checked')].map((i) => i.value));
+  try {
+    const ref = collectionOuverte ? doc(db, 'collections', collectionOuverte) : doc(collection(db, 'collections'));
+    const lot = writeBatch(db);
+    lot.set(ref, collectionOuverte ? donnees : { ...donnees, creeLe: serverTimestamp() }, { merge: true });
+    articles.forEach((a) => {
+      if (choisies.has(a.id) && a.collection !== ref.id) lot.update(doc(db, 'articles', a.id), { collection: ref.id });
+      if (!choisies.has(a.id) && a.collection === ref.id) lot.update(doc(db, 'articles', a.id), { collection: '' });
+    });
+    await lot.commit();
+    $('fiche-collection').close('enregistre');
+  } catch (erreur) {
+    message('La collection n\'a pas pu être enregistrée.');
+  }
+});
+
+// Les états (« à venir », « en cours »…) changent avec l'heure : on les rafraîchit.
+setInterval(() => { if (collections.length && !$('ecran-admin').hidden) dessinerCollections(); }, 60000);
 
 // ============================================================
 //  Offres
@@ -802,5 +1003,121 @@ $('formulaire-offre').addEventListener('submit', async (e) => {
     $('fiche-offre').close('enregistre');
   } catch (erreur) {
     message('L\'offre n\'a pas pu être enregistrée.');
+  }
+});
+
+// ============================================================
+//  Codes promo
+// ============================================================
+// Chaque code est un document dont l'identifiant est le code lui-même.
+let codes = [];
+
+function ecouterCodes() {
+  return onSnapshot(collection(db, 'codes'), (instantane) => {
+    codes = instantane.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.creeLe?.seconds || 0) - (a.creeLe?.seconds || 0));
+    dessinerCodes();
+  });
+}
+
+function etatCode(c) {
+  const ajd = aujourdhui();
+  if (!c.actif) return ['Désactivé', false];
+  if (c.debut && ajd < c.debut) return ['À venir', false];
+  if (c.fin && ajd > c.fin) return ['Expiré', false];
+  return ['Actif', true];
+}
+
+function dessinerCodes() {
+  if (!$('liste-codes')) return;
+  $('codes-vides').hidden = codes.length > 0;
+  $('liste-codes').innerHTML = codes.map((c) => {
+    const [etat, actif] = etatCode(c);
+    // Combien de commandes (non annulées) ont utilisé ce code.
+    const utilisations = commandes.filter((x) => x.code === c.id && etapeDe(x).id !== 'annulee').length;
+    const periode = [c.debut ? `à partir du ${dateCourte(c.debut)}` : '', c.fin ? `jusqu'au ${dateCourte(c.fin)}` : 'sans date de fin'].filter(Boolean).join(', ');
+    return `<article class="carte offre" data-code="${echapper(c.id)}">
+      <div class="offre-tete">
+        <strong class="code-promo">${echapper(c.id)}</strong>
+        <span class="etiquette${actif ? ' forte' : ''}">${etat}</span>
+        <span class="taux">−${echapper(c.reduction)} %</span>
+      </div>
+      <span class="discret">${echapper(periode)}</span>
+      <span>${utilisations} commande${utilisations > 1 ? 's' : ''} avec ce code</span>
+      <div class="article-actions">
+        <button class="lien" data-action-code="copier">Copier</button>
+        <button class="lien" data-action-code="modifier">Modifier</button>
+        <button class="lien" data-action-code="actif">${c.actif ? 'Désactiver' : 'Activer'}</button>
+        <button class="lien danger pousse" data-action-code="supprimer">Supprimer</button>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+$('liste-codes').addEventListener('click', async (e) => {
+  const action = e.target.dataset.actionCode;
+  if (!action) return;
+  const c = codes.find((x) => x.id === e.target.closest('[data-code]').dataset.code);
+  if (action === 'copier') {
+    await navigator.clipboard.writeText(c.id).catch(() => {});
+    e.target.textContent = 'Copié';
+    setTimeout(() => { e.target.textContent = 'Copier'; }, 1500);
+  }
+  if (action === 'modifier') ouvrirCode(c);
+  if (action === 'actif') await updateDoc(doc(db, 'codes', c.id), { actif: !c.actif }).catch(() => alert('Modification impossible.'));
+  if (action === 'supprimer') {
+    if (!confirm(`Supprimer définitivement le code ${c.id} ?\nPour l'arrêter sans le perdre, utilise plutôt « Désactiver ».`)) return;
+    await deleteDoc(doc(db, 'codes', c.id)).catch(() => alert('Suppression impossible.'));
+  }
+});
+
+// ---------- Fiche d'un code
+let codeOuvert = null;
+
+function ouvrirCode(c) {
+  const f = $('formulaire-code');
+  f.reset();
+  codeOuvert = c ? c.id : null;
+  $('titre-fiche-code').textContent = c ? `Modifier ${c.id}` : 'Nouveau code promo';
+  $('message-code').textContent = '';
+  f.code.value = c ? c.id : '';
+  f.code.disabled = Boolean(c);
+  $('proposer-code').hidden = Boolean(c);
+  f.reduction.value = c ? c.reduction : '';
+  f.debut.value = c ? c.debut || '' : aujourdhui();
+  f.fin.value = c ? c.fin || '' : '';
+  f.actif.checked = c ? Boolean(c.actif) : true;
+  $('fiche-code').showModal();
+}
+$('ajouter-code').addEventListener('click', () => ouvrirCode(null));
+
+// Un code facile à lire : sans 0/O ni 1/I, qui se confondent sur une carte.
+$('proposer-code').addEventListener('click', () => {
+  const lettres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const hasard = Array.from(crypto.getRandomValues(new Uint32Array(5)), (n) => lettres[n % lettres.length]).join('');
+  const taux = $('formulaire-code').reduction.value;
+  $('formulaire-code').code.value = `BD${taux || ''}-${hasard}`.slice(0, 20);
+});
+
+$('formulaire-code').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const message = (texte) => { $('message-code').textContent = texte; };
+  const code = f.code.value.trim().toUpperCase();
+  const reduction = Number(f.reduction.value);
+  if (!/^[A-Z0-9-]{3,20}$/.test(code)) return message('Le code doit faire 3 à 20 caractères : lettres, chiffres ou tirets.');
+  if (!Number.isInteger(reduction) || reduction < 1 || reduction > 90) return message('La réduction doit être un nombre entier entre 1 et 90.');
+  if (f.debut.value && f.fin.value && f.fin.value < f.debut.value) return message('La date de fin doit venir après la date de début.');
+  const donnees = { reduction, debut: f.debut.value || '', fin: f.fin.value || '', actif: f.actif.checked };
+  try {
+    if (codeOuvert) {
+      await updateDoc(doc(db, 'codes', codeOuvert), donnees);
+    } else {
+      if ((await getDoc(doc(db, 'codes', code))).exists()) return message('Ce code existe déjà. Choisis-en un autre.');
+      await setDoc(doc(db, 'codes', code), { ...donnees, creeLe: serverTimestamp() });
+    }
+    $('fiche-code').close('enregistre');
+  } catch (erreur) {
+    message('Le code n\'a pas pu être enregistré.');
   }
 });

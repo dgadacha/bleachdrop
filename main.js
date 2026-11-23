@@ -41,6 +41,10 @@ const REGLAGES = {
   surMesure: true, // false = le motif sur mesure n'est pas proposé
   prixSurMesure: 'à partir de 7 500 XPF',
 
+  // Les collections (« drops ») se gèrent dans le back-office (onglet « Collections »).
+  // Sans base, aucune collection : toutes les pièces sont en vente.
+  collections: [],
+
   // La photo montrée en premier dans la galerie, quand une pièce en a plusieurs.
   vueParDefaut: 'Dos',
 
@@ -95,73 +99,6 @@ const FIREBASE = {
 };
 
 // ============================================================
-//  Motif dessiné : une colonne de vertèbres hérissée d'épines
-// ============================================================
-function hasard(graine) {
-  let g = graine >>> 0;
-  return () => (g = (g * 1664525 + 1013904223) >>> 0) / 4294967296;
-}
-
-const f = (n) => n.toFixed(1);
-
-function dessinerColonne(o) {
-  const r = hasard(o.graine);
-  const phase = r() * Math.PI * 2;
-  const point = (t) => [
-    o.l * ((o.centre || 0.5) + o.ampleur * Math.sin(t * Math.PI * o.vagues + phase)),
-    o.h * (-0.06 + 1.12 * t),
-  ];
-
-  let epines = '';
-  let os = '';
-
-  for (let i = 0; i < o.nombre; i++) {
-    const t = i / (o.nombre - 1);
-    const [x, y] = point(t);
-    const [x2, y2] = point(t + 0.002);
-    const angle = Math.atan2(y2 - y, x2 - x);
-    const taille = o.taille * (0.5 + 0.5 * Math.sin(Math.PI * (0.08 + 0.84 * t))) * (0.9 + r() * 0.2);
-
-    // Épines : deux ou trois de chaque côté, couchées vers l'arrière.
-    for (const cote of [-1, 1]) {
-      const combien = 2 + (r() > 0.55 ? 1 : 0);
-      for (let k = 0; k < combien; k++) {
-        const direction = angle + cote * (Math.PI / 2 + 0.25 + r() * 0.55) + (k - 1) * 0.28;
-        const longueur = taille * (1.6 + r() * 2.2);
-        const base = taille * (0.06 + r() * 0.06);
-        const bx = x + Math.cos(angle + cote * Math.PI / 2) * taille * 0.42;
-        const by = y + Math.sin(angle + cote * Math.PI / 2) * taille * 0.42;
-        const px = bx + Math.cos(direction) * longueur;
-        const py = by + Math.sin(direction) * longueur;
-        const courbe = cote * (0.2 + r() * 0.25) * longueur;
-        const cx = (bx + px) / 2 + Math.cos(angle) * courbe;
-        const cy = (by + py) / 2 + Math.sin(angle) * courbe;
-        const dx = Math.cos(angle) * base;
-        const dy = Math.sin(angle) * base;
-        epines += `<path d="M${f(bx - dx)} ${f(by - dy)}Q${f(cx - dx * 0.4)} ${f(cy - dy * 0.4)} ${f(px)} ${f(py)}Q${f(cx + dx * 0.4)} ${f(cy + dy * 0.4)} ${f(bx + dx)} ${f(by + dy)}Z"/>`;
-      }
-    }
-
-    // Vertèbre : une coque blanche, un creux noir, quelques hachures.
-    const rx = taille * 0.4;
-    const ry = taille * 0.56;
-    let hachures = '';
-    const traits = 5 + Math.floor(r() * 4);
-    for (let k = 0; k < traits; k++) {
-      const hx = -rx * 0.5 + (k / traits) * rx * 1.0 + r() * 3;
-      hachures += `<line x1="${f(hx)}" y1="${f(-ry * (0.15 + r() * 0.35))}" x2="${f(hx + rx * 0.18)}" y2="${f(ry * (0.1 + r() * 0.4))}"/>`;
-    }
-    os += `<g transform="translate(${f(x)} ${f(y)}) rotate(${f(angle * 180 / Math.PI)})">`
-      + `<ellipse rx="${f(rx)}" ry="${f(ry)}" fill="#f4f4f1"/>`
-      + `<ellipse cx="${f(rx * 0.06)}" rx="${f(rx * 0.74)}" ry="${f(ry * 0.72)}" fill="#000"/>`
-      + `<g stroke="#f4f4f1" stroke-width="${f(Math.max(1, taille * 0.035))}" stroke-linecap="round">${hachures}</g>`
-      + `</g>`;
-  }
-
-  return `<g filter="url(#javel)"><g fill="#f4f4f1">${epines}</g>${os}</g>`;
-}
-
-// ============================================================
 //  Mise en page
 // ============================================================
 const echapper = (texte) => String(texte).replace(/[&<>"']/g, (c) => (
@@ -174,13 +111,16 @@ function poserMarque() {
   document.title = `${REGLAGES.marque} — tee-shirts à la javel`;
 }
 
+// Visuel provisoire d'une pièce sans photo : un tee-shirt noir taché de javel.
 function visuelProvisoire(index) {
-  const motif = dessinerColonne({
-    graine: 31 + index * 17, l: 400, h: 500, nombre: 9, taille: 50, ampleur: 0.07 + (index % 3) * 0.03, vagues: 1 + (index % 2) * 0.6,
-  });
+  const id = `tache-${index}`;
+  const x = 170 + (index % 3) * 30;
   return `<svg viewBox="0 0 400 500" role="img" aria-label="Visuel provisoire">`
-    + `<path d="M140 60 Q200 104 260 60 L340 95 L385 190 L325 220 L310 185 L310 462 L90 462 L90 185 L75 220 L15 190 L60 95 Z" fill="#050505" stroke="#3a3a3a" stroke-width="1.5"/>`
-    + `<g clip-path="url(#forme-tee)"><g transform="translate(200 270) scale(.62) translate(-200 -250)">${motif}</g></g>`
+    + `<defs><radialGradient id="${id}" cx="45%" cy="35%" r="70%"><stop offset="0" stop-color="#fff1de"/><stop offset=".45" stop-color="#e0844f"/><stop offset="1" stop-color="#d05106"/></radialGradient></defs>`
+    + `<path d="M140 60 Q200 104 260 60 L340 95 L385 190 L325 220 L310 185 L310 462 L90 462 L90 185 L75 220 L15 190 L60 95 Z" fill="#000" stroke="#3a3a3a" stroke-width="1.5"/>`
+    + `<g clip-path="url(#forme-tee)" fill="url(#${id})" opacity=".9">`
+    + `<circle cx="${x}" cy="240" r="52"/><circle cx="${x + 58}" cy="196" r="10"/><circle cx="${x - 62}" cy="214" r="7"/>`
+    + `<rect x="${x - 34}" y="250" width="18" height="96" rx="9"/><rect x="${x + 8}" y="262" width="14" height="128" rx="7"/></g>`
     + `</svg><span class="a-venir">Photo à venir</span>`;
 }
 
@@ -207,7 +147,8 @@ function baliseImage(photo, classe, alt, paresseux) {
 let minuterieAccueil = null;
 function poserAccueil() {
   const cadre = document.getElementById('hero-visuel');
-  const photos = REGLAGES.pieces.flatMap((piece) => piece.photos || []);
+  // Seulement les pièces en vente : un drop à venir reste une surprise.
+  const photos = piecesEnVente().flatMap((piece) => piece.photos || []);
   // Les dos d'abord : c'est là que sont les grands motifs.
   photos.sort((a, b) => (b.legende === 'Dos') - (a.legende === 'Dos'));
   cadre.innerHTML = photos.map((photo, n) => baliseImage(photo, n ? '' : 'active', '', false)).join('');
@@ -226,7 +167,14 @@ function poserAccueil() {
 function poserGalerie() {
   const galerie = document.getElementById('galerie');
   galerie.classList.toggle('photos-nb', REGLAGES.photosEnNoirEtBlanc);
-  galerie.innerHTML = REGLAGES.pieces.map((piece, i) => {
+  const pieces = piecesEnVente().filter((piece) => {
+    if (filtrePieces === 'tout') return true;
+    if (filtrePieces === 'autres') return !piece.collection;
+    return piece.collection === filtrePieces;
+  });
+  galerie.innerHTML = pieces.map((piece) => {
+    const i = REGLAGES.pieces.indexOf(piece); // le visuel provisoire ne change pas avec le filtre
+    const collection = collectionDe(piece);
     const photos = piece.photos || [];
     const nom = (photo) => echapper(`${piece.titre} — ${photo.legende || 'photo'}`);
     let visuel;
@@ -242,9 +190,9 @@ function poserGalerie() {
         + `<div class="vues">${photos.map((photo, n) => `<button type="button" data-vue="${n}" aria-pressed="${n === debut}">${echapper(photo.legende || `Photo ${n + 1}`)}</button>`).join('')}</div>`;
     }
     return `<article class="piece">
-      <div class="piece-visuel">${visuel}</div>
+      <div class="piece-visuel">${visuel}${photos.length ? '<span class="badge-unique">Pièce unique</span>' : ''}</div>
       <div class="piece-infos">
-        <h3>${echapper(piece.titre)}</h3>
+        <div>${collection ? `<span class="piece-collection">${echapper(collection.nom)}</span>` : ''}<h3>${echapper(piece.titre)}</h3></div>
         <span class="piece-prix">${baliseprix(piece)}</span>
       </div>
       ${piece.note ? `<p class="piece-note">${echapper(piece.note)}</p>` : ''}
@@ -275,7 +223,11 @@ function brancherGalerie() {
 // ============================================================
 //  Articles gérés dans le back-office
 // ============================================================
-const adresseBase = (chemin) => `https://firestore.googleapis.com/v1/projects/${FIREBASE.projet}/databases/(default)/documents${chemin}${chemin.includes('?') ? '&' : '?'}key=${FIREBASE.cle}`;
+// Essais en local : http://localhost:…/?emulateur lit l'émulateur Firebase, pas la vraie base.
+const SERVEUR_BASE = ['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('emulateur')
+  ? 'http://127.0.0.1:8085'
+  : 'https://firestore.googleapis.com';
+const adresseBase = (chemin) => `${SERVEUR_BASE}/v1/projects/${FIREBASE.projet}/databases/(default)/documents${chemin}${chemin.includes('?') ? '&' : '?'}key=${FIREBASE.cle}`;
 
 // Traduit une valeur au format de la base en valeur JavaScript.
 function lireValeur(v) {
@@ -317,13 +269,12 @@ async function chargerArticles() {
       titre: a.titre,
       note: a.note || '',
       prix: a.prix || '',
+      collection: a.collection || '',
       photos: (a.photos || []).filter((p) => p && (p.fichier || p.photoId)),
     }));
-    poserAccueil();
-    poserGalerie();
-    redessinerListes();
-    poserPromo();
-    chargerPhotos();
+    // Les collections disent quelles pièces sont en vente : on les attend.
+    await collectionsPretes;
+    poserPieces();
   } catch (erreur) {
     // Base injoignable : on garde les pièces écrites dans ce fichier.
   }
@@ -356,17 +307,74 @@ function redessinerListes() {
   majPrixChoisi();
 }
 
-// Sous la liste : le prix complet de la pièce choisie, avec l'offre en cours.
+// ============================================================
+//  Code promo
+// ============================================================
+// Un code se vérifie en lisant son document dans la base : on ne peut pas
+// lister les codes, seulement vérifier celui qu'on connaît.
+let codeActuel = null; // { code, reduction } quand le code saisi est valable
+let etatCode = 'vide'; // 'vide', 'verif', 'ok', 'ko'
+const codesLus = new Map();
+const normaliserCode = (texte) => String(texte || '').toUpperCase().replace(/\s+/g, '');
+
+function lireCode(code) {
+  if (!codesLus.has(code)) {
+    codesLus.set(code, fetch(adresseBase(`/codes/${encodeURIComponent(code)}`))
+      .then((r) => (r.status === 404 ? null : r.ok ? r.json().then((d) => lireChamps(d.fields)) : undefined))
+      .catch(() => undefined)); // undefined : base injoignable, on ne sait pas
+  }
+  return codesLus.get(code);
+}
+
+// Un code est valable s'il est actif et dans sa période (jours entiers, heure de Nouméa).
+function codeValable(c) {
+  if (!c || c.actif === false || !(c.reduction >= 1 && c.reduction <= 90)) return false;
+  if (c.debut && Date.now() < Date.parse(`${c.debut}T00:00:00+11:00`)) return false;
+  if (c.fin && Date.now() >= Date.parse(`${c.fin}T00:00:00+11:00`) + JOUR) return false;
+  return true;
+}
+
+let minuterieCode = null;
+function surSaisieCode() {
+  clearTimeout(minuterieCode);
+  const code = normaliserCode(document.getElementById('code').value);
+  const etat = document.getElementById('etat-code');
+  codeActuel = null;
+  if (!code) { etatCode = 'vide'; etat.textContent = ''; majPrixChoisi(); return; }
+  if (!/^[A-Z0-9-]{3,20}$/.test(code)) { etatCode = 'ko'; etat.textContent = 'Ce code n\'existe pas.'; majPrixChoisi(); return; }
+  etatCode = 'verif';
+  etat.textContent = 'Vérification…';
+  minuterieCode = setTimeout(async () => {
+    const c = await lireCode(code);
+    if (normaliserCode(document.getElementById('code').value) !== code) return; // saisie changée entre-temps
+    if (c === undefined) { etatCode = 'vide'; etat.textContent = 'Vérification impossible pour l\'instant : le code sera vérifié par notre équipe.'; }
+    else if (codeValable(c)) { etatCode = 'ok'; codeActuel = { code, reduction: c.reduction }; etat.textContent = `Code ${code} : −${c.reduction} %.`; }
+    else { etatCode = 'ko'; etat.textContent = c ? 'Ce code n\'est plus valable.' : 'Ce code n\'existe pas.'; }
+    majPrixChoisi();
+  }, 400);
+}
+
+// Le prix en vigueur avec le code : l'offre et le code ne se cumulent pas,
+// le client paie le prix le plus bas des deux.
+function prixFinal(piece) {
+  const p = prixPour(piece);
+  if (!codeActuel || !/\d/.test(p.normal || '') || (p.offre && p.offre.reduction >= codeActuel.reduction)) return { ...p, code: null };
+  return { normal: p.normal, actuel: reduire(p.normal, codeActuel.reduction), offre: null, code: codeActuel };
+}
+
+// Sous la liste : le prix complet de la pièce choisie, avec l'offre ou le code.
 function majPrixChoisi() {
   const valeur = document.getElementById('piece').value;
   const fiche = valeur === SUR_MESURE ? null : REGLAGES.pieces.find((p) => p.titre === valeur);
   const ligne = document.getElementById('prix-choisi');
-  const p = valeur && (valeur === SUR_MESURE || fiche) ? prixPour(fiche) : null;
+  const p = valeur && (valeur === SUR_MESURE || fiche) ? prixFinal(fiche) : null;
   if (!p || !p.normal) { ligne.textContent = ''; return; }
   const majuscule = (texte) => texte.charAt(0).toUpperCase() + texte.slice(1);
-  ligne.textContent = p.offre
-    ? `${majuscule(p.actuel)} au lieu de ${p.normal.replace(/^à partir de /i, '')} · ${p.offre.nom || 'offre'} jusqu'au ${dateCourte(p.offre.fin)}`
-    : majuscule(p.normal);
+  const sans = p.normal.replace(/^à partir de /i, '');
+  if (p.code) ligne.textContent = `${majuscule(p.actuel)} au lieu de ${sans} · code ${p.code.code} −${p.code.reduction} %`;
+  else if (p.offre) ligne.textContent = `${majuscule(p.actuel)} au lieu de ${sans} · ${p.offre.nom || 'offre'} jusqu'au ${dateCourte(p.offre.fin)}`
+    + (codeActuel ? ' (plus avantageux que votre code)' : '');
+  else ligne.textContent = majuscule(p.normal);
 }
 
 // Les offres actives de la base remplacent celles écrites dans REGLAGES.
@@ -418,7 +426,7 @@ function chargerPhotos() {
 function poserListes() {
   const option = (valeur, texte = valeur) => `<option value="${echapper(valeur)}">${echapper(texte)}</option>`;
   document.getElementById('piece').innerHTML = option('', 'Choisir…')
-    + REGLAGES.pieces.map((p) => option(p.titre, p.prix ? `${p.titre} — ${prixPour(p).actuel}` : p.titre)).join('')
+    + piecesEnVente().map((p) => option(p.titre, p.prix ? `${p.titre} — ${prixPour(p).actuel}` : p.titre)).join('')
     // « à partir de » devient « dès » : sinon le prix est coupé sur téléphone.
     + (REGLAGES.surMesure
       ? option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${prixPour(null).actuel.replace(/^à partir de /i, 'dès ')}` : SUR_MESURE)
@@ -478,7 +486,7 @@ function prixPour(piece) {
 
 // Ce que vise une offre, en clair, pour le bandeau.
 function cibleEnClair(o) {
-  const choisies = REGLAGES.pieces.filter((p) => offreVise(o, p)).map((p) => p.titre);
+  const choisies = piecesEnVente().filter((p) => offreVise(o, p)).map((p) => p.titre);
   let pieces = '';
   if (o.pieces === 'toutes') pieces = 'toutes les pièces';
   else if (choisies.length) pieces = choisies.length <= 3 ? choisies.join(', ').replace(/, ([^,]*)$/, ' et $1') : 'une sélection de pièces';
@@ -508,6 +516,207 @@ function poserPromo() {
 }
 
 // ============================================================
+//  Collections (« drops »), gérées dans le back-office
+// ============================================================
+// Limitée : en vente du lancement à la fin (heure de Nouméa, 'AAAA-MM-JJTHH:MM').
+//   Avant, ses pièces sont cachées ; la prochaine programmée affiche un décompte.
+//   Après la fin, ses pièces quittent le site.
+// Permanente : toujours en vente.
+const momentNC = (texte) => (texte ? Date.parse(`${texte}:00+11:00`) : NaN);
+
+function etatCollection(c) {
+  if (c.type === 'permanente') return 'permanente';
+  const maintenant = Date.now();
+  if (maintenant < momentNC(c.debut)) return 'avenir';
+  if (maintenant >= momentNC(c.fin)) return 'fin';
+  return 'encours';
+}
+
+const collectionDe = (piece) => (piece && piece.collection ? REGLAGES.collections.find((c) => c.id === piece.collection) : undefined);
+
+// En vente : une pièce sans collection, ou dans une collection permanente ou en cours.
+// Une collection inconnue (masquée, supprimée, base muette) cache ses pièces.
+function enVente(piece) {
+  if (!piece.collection) return true;
+  const c = collectionDe(piece);
+  return Boolean(c) && ['permanente', 'encours'].includes(etatCollection(c));
+}
+const piecesEnVente = () => REGLAGES.pieces.filter(enVente);
+
+// Les collections montrées : les drops en cours (le plus récent d'abord), puis les permanentes.
+function collectionsEnVente() {
+  const pieces = piecesEnVente();
+  const enCours = REGLAGES.collections.filter((c) => etatCollection(c) === 'encours').sort((a, b) => momentNC(b.debut) - momentNC(a.debut));
+  const permanentes = REGLAGES.collections.filter((c) => etatCollection(c) === 'permanente')
+    .sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr', { numeric: true }));
+  return [...enCours, ...permanentes].filter((c) => pieces.some((p) => p.collection === c.id));
+}
+
+// Le décompte ne concerne que la prochaine collection limitée programmée.
+const prochaineCollection = () => REGLAGES.collections.filter((c) => etatCollection(c) === 'avenir')
+  .sort((a, b) => momentNC(a.debut) - momentNC(b.debut))[0];
+
+// « le samedi 6 décembre à 18 h », « jusqu'au 24 déc. à 23 h 59 »
+function heureNC(texte) {
+  const [h, m] = new Date(momentNC(texte)).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Pacific/Noumea' }).split(':');
+  return m === '00' ? `${Number(h)} h` : `${Number(h)} h ${m}`;
+}
+const jourLongNC = (texte) => new Date(momentNC(texte)).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Pacific/Noumea' });
+const jourCourtNC = (texte) => new Date(momentNC(texte)).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', timeZone: 'Pacific/Noumea' });
+
+async function chargerCollections() {
+  try {
+    const reponse = await fetch(adresseBase(':runQuery'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: 'collections' }],
+          where: { fieldFilter: { field: { fieldPath: 'visible' }, op: 'EQUAL', value: { booleanValue: true } } },
+        },
+      }),
+    });
+    if (!reponse.ok) return;
+    REGLAGES.collections = (await reponse.json())
+      .filter((ligne) => ligne.document)
+      .map((ligne) => ({ id: ligne.document.name.split('/').pop(), ...lireChamps(ligne.document.fields) }))
+      .filter((c) => c.nom && (c.type === 'permanente' || (momentNC(c.debut) < momentNC(c.fin))));
+  } catch (erreur) {
+    // Base injoignable : pas de collections, les pièces sans collection restent en vente.
+  }
+}
+
+function blocDecompte(c) {
+  const unite = (cle, nom) => `<span><b data-unite="${cle}">00</b><small>${nom}</small></span>`;
+  return `<p class="sur-titre">Prochain drop</p>
+    <h3 class="drop-nom">${echapper(c.nom)}</h3>
+    ${c.description ? `<p class="drop-texte">${echapper(c.description)}</p>` : ''}
+    <div class="compteur" role="timer" aria-label="Temps restant avant le lancement" data-decompte="${echapper(c.debut)}">
+      ${[unite('j', 'jours'), unite('h', 'heures'), unite('m', 'min'), unite('s', 'sec')].join('<i class="sep" aria-hidden="true">:</i>')}
+    </div>
+    <p class="drop-date">Lancement ${echapper(jourLongNC(c.debut))} à ${echapper(heureNC(c.debut))} · en vente jusqu'au ${echapper(jourCourtNC(c.fin))}</p>`;
+}
+
+function carteCollection(c) {
+  const pieces = piecesEnVente().filter((p) => p.collection === c.id);
+  // Trois photos au plus, les dos d'abord : c'est là que sont les grands motifs.
+  const photos = pieces.map((p) => (p.photos || []).find((photo) => photo.legende === 'Dos') || (p.photos || [])[0]).filter(Boolean).slice(0, 3);
+  const etat = c.type === 'permanente'
+    ? 'Collection permanente'
+    : `Drop en cours · jusqu'au ${jourCourtNC(c.fin)} à ${heureNC(c.fin)}`;
+  return `<article class="collection">
+    <div class="collection-photos" style="--n:${Math.max(1, photos.length)}">
+      ${photos.length ? photos.map((photo) => baliseImage(photo, '', '', true)).join('') : '<span class="collection-vide"></span>'}
+    </div>
+    <div class="collection-texte">
+      <p class="collection-etat">${echapper(etat)}</p>
+      <h3>${echapper(c.nom)}</h3>
+      ${c.description ? `<p class="collection-description">${echapper(c.description)}</p>` : ''}
+      <a class="bouton" href="#pieces" data-filtre="${echapper(c.id)}">Voir ${pieces.length > 1 ? `les ${pieces.length} pièces` : 'la pièce'}</a>
+    </div>
+  </article>`;
+}
+
+// Numéros des sections (01, 02…) : la section Collections n'est pas toujours là.
+function numeroterSections() {
+  document.querySelectorAll('main > .section:not([hidden]) .numero').forEach((el, n) => {
+    el.textContent = String(n + 1).padStart(2, '0');
+  });
+}
+
+function poserCollections() {
+  const prochaine = prochaineCollection();
+  const liste = collectionsEnVente();
+  const montrer = Boolean(prochaine || liste.length);
+  document.getElementById('collections').hidden = !montrer;
+  document.querySelectorAll('[data-lien-collections]').forEach((lien) => { lien.hidden = !montrer; });
+  numeroterSections();
+  const decompte = document.getElementById('decompte');
+  decompte.hidden = !prochaine;
+  decompte.innerHTML = prochaine ? blocDecompte(prochaine) : '';
+  document.getElementById('liste-collections').innerHTML = liste.map(carteCollection).join('');
+  majDecomptes();
+}
+
+// ---------- Filtre de la galerie par collection
+let filtrePieces = 'tout'; // 'tout', 'autres' (sans collection) ou l'identifiant d'une collection
+
+function poserFiltres() {
+  const barre = document.getElementById('filtres-pieces');
+  const liste = collectionsEnVente();
+  const pieces = piecesEnVente();
+  const autres = pieces.filter((p) => !p.collection).length;
+  const choix = liste.length ? [
+    ['tout', 'Tout', pieces.length],
+    ...liste.map((c) => [c.id, c.nom, pieces.filter((p) => p.collection === c.id).length]),
+    ...(autres ? [['autres', 'Autres pièces', autres]] : []),
+  ] : [];
+  if (!choix.some(([cle]) => cle === filtrePieces)) filtrePieces = 'tout';
+  barre.hidden = !choix.length;
+  barre.innerHTML = choix.map(([cle, nom, n]) => `<button type="button" data-filtre="${echapper(cle)}" aria-pressed="${cle === filtrePieces}">${echapper(nom)} <span>${n}</span></button>`).join('');
+}
+
+// Un bouton de filtre, ou « Voir les pièces » sur une carte de collection.
+document.addEventListener('click', (e) => {
+  const bouton = e.target.closest('[data-filtre]');
+  if (!bouton) return;
+  filtrePieces = bouton.dataset.filtre;
+  poserFiltres();
+  poserGalerie();
+  chargerPhotos();
+  reveler();
+});
+
+// ---------- Décompte, mis à jour chaque seconde
+// Quand une collection change d'état (lancement, fin), toute la page se redessine.
+let etatsCollections = '';
+function majDecomptes() {
+  const signature = REGLAGES.collections.map(etatCollection).join();
+  if (etatsCollections && signature !== etatsCollections) {
+    etatsCollections = signature;
+    poserPieces();
+    return;
+  }
+  etatsCollections = signature;
+  document.querySelectorAll('[data-decompte]').forEach((el) => {
+    const secondes = Math.max(0, Math.floor((momentNC(el.dataset.decompte) - Date.now()) / 1000));
+    const valeurs = { j: Math.floor(secondes / 86400), h: Math.floor((secondes % 86400) / 3600), m: Math.floor((secondes % 3600) / 60), s: secondes % 60 };
+    el.querySelectorAll('[data-unite]').forEach((b) => { b.textContent = String(valeurs[b.dataset.unite]).padStart(2, '0'); });
+  });
+}
+
+// Tout ce qui dépend des pièces en vente.
+function poserPieces() {
+  poserAccueil();
+  poserCollections();
+  poserFiltres();
+  poserGalerie();
+  redessinerListes();
+  poserPromo();
+  chargerPhotos();
+  reveler();
+}
+
+let collectionsPretes = Promise.resolve();
+
+// ---------- Apparition douce des blocs au défilement
+const mouvementReduit = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const observateur = 'IntersectionObserver' in window && !mouvementReduit
+  ? new IntersectionObserver((entrees) => entrees.forEach((e) => {
+    if (e.isIntersecting) { e.target.classList.add('vu'); observateur.unobserve(e.target); }
+  }), { rootMargin: '0px 0px -8% 0px', threshold: 0.08 })
+  : null;
+function reveler() {
+  if (!observateur) return;
+  document.documentElement.classList.add('js');
+  document.querySelectorAll('.section-tete, .etapes li, .piece, .collection, .decompte, .formulaire').forEach((el) => {
+    if (el.classList.contains('apparait')) return;
+    el.classList.add('apparait');
+    observateur.observe(el);
+  });
+}
+
+// ============================================================
 //  Formulaire de commande
 // ============================================================
 // Pays proposés dans le formulaire (la même liste est contrôlée par la fonction d'envoi).
@@ -529,6 +738,7 @@ function verifier(d) {
   if (d.nom.length < 2) erreurs.nom = 'Indiquez votre prénom et votre nom.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) erreurs.email = 'Indiquez une adresse e-mail valide.';
   if (!PAYS.includes(d.pays)) erreurs.pays = 'Choisissez votre pays.';
+  if (d.codeSaisi && etatCode === 'ko') erreurs.code = 'Ce code n\'est pas valable. Corrigez-le ou laissez vide.';
   if (d.telephone === null) erreurs.telephone = 'Indiquez un numéro calédonien à 6 chiffres, ou laissez vide.';
   if (!d.piece) erreurs.piece = 'Choisissez une pièce, ou « Motif sur mesure ».';
   if (!d.taille) erreurs.taille = 'Choisissez une taille.';
@@ -544,6 +754,7 @@ function ecrireMessage(d) {
     `E-mail : ${d.email}`,
     `Pays : ${d.pays}`,
     ...(d.telephone ? [`Téléphone : ${d.telephone}`] : []),
+    ...(d.code ? [`Code promo : ${d.code}`] : []),
     `Pièce : ${d.piece}`,
     `Taille : ${d.taille}`,
     ...(d.prix ? [`Prix affiché : ${d.prix}`] : []),
@@ -596,7 +807,7 @@ async function envoyer(d) {
   const sujet = `Commande — ${d.piece} (${d.taille})`;
 
   if (REGLAGES.adresseFormulaire) {
-    const { fichier, ...champs } = d;
+    const { fichier, codeSaisi, ...champs } = d;
     const modele = fichier ? await preparerModele(fichier) : undefined;
     const reponse = await fetch(REGLAGES.adresseFormulaire, {
       method: 'POST',
@@ -643,13 +854,21 @@ function brancherFormulaire() {
       nom: brut.nom.trim(), email: brut.email.trim(), pays: brut.pays, telephone: telephoneNC(brut.telephone),
       piece: brut.piece, taille: brut.taille, message: brut.message.trim(),
       fichier: brut.modele && brut.modele.size ? brut.modele : null,
+      // Le code part s'il est valable, ou si on n'a pas pu le vérifier : le serveur tranche.
+      codeSaisi: normaliserCode(brut.code),
+      code: etatCode === 'ko' ? '' : normaliserCode(brut.code),
     };
 
     // Le prix vu par le client au moment de sa demande, pour que l'équipe le retrouve.
     const fiche = d.piece === SUR_MESURE ? null : REGLAGES.pieces.find((p) => p.titre === d.piece);
     if (d.piece === SUR_MESURE || fiche) {
-      const p = prixPour(fiche);
-      if (p.normal) d.prix = p.actuel + (p.offre ? ` (${p.offre.nom || 'offre'} −${p.offre.reduction} %, prix normal ${p.normal})` : '');
+      const p = prixFinal(fiche);
+      if (p.normal) {
+        let detail = '';
+        if (p.code) detail = ` (code ${p.code.code} −${p.code.reduction} %, prix normal ${p.normal})`;
+        else if (p.offre) detail = ` (${p.offre.nom || 'offre'} −${p.offre.reduction} %, prix normal ${p.normal})`;
+        d.prix = p.actuel + detail;
+      }
     }
 
     const erreurs = verifier(d);
@@ -681,7 +900,8 @@ function brancherFormulaire() {
   });
 
   document.getElementById('piece').addEventListener('change', majPrixChoisi);
-  formulaire.addEventListener('reset', () => setTimeout(majPrixChoisi));
+  document.getElementById('code').addEventListener('input', surSaisieCode);
+  formulaire.addEventListener('reset', () => setTimeout(surSaisieCode));
 
   formulaire.addEventListener('input', (e) => {
     const champ = e.target.closest('.champ');
@@ -700,6 +920,10 @@ poserPied();
 poserPromo();
 brancherGalerie();
 brancherFormulaire();
+collectionsPretes = chargerCollections();
+collectionsPretes.then(poserPieces);
 chargerArticles();
 chargerReglages();
 chargerOffres();
+setInterval(majDecomptes, 1000);
+reveler();

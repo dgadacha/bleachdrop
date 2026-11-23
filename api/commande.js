@@ -71,6 +71,7 @@ async function enregistrer(d, modele) {
   if (d.prix) champs.prix = texte(d.prix);
   if (d.message) champs.message = texte(d.message);
   if (modeleId) champs.modeleId = texte(modeleId);
+  if (d.code) { champs.code = texte(d.code); champs.codeReduction = { integerValue: String(d.codeReduction) }; }
   try {
     const reponse = await fetch(`${BASE}/commandes?key=${CLE_BASE}`, {
       method: 'POST',
@@ -83,6 +84,29 @@ async function enregistrer(d, modele) {
   } catch (erreur) {
     console.error('Base injoignable :', erreur);
     return false;
+  }
+}
+
+// Revérifie un code promo dans la base (actif, dans sa période, pourcentage
+// plausible). Renvoie le pourcentage, ou 0 si le code n'est pas valable.
+async function verifierCode(code) {
+  if (!/^[A-Z0-9-]{3,20}$/.test(code)) return 0;
+  try {
+    const reponse = await fetch(`${BASE}/codes/${encodeURIComponent(code)}?key=${CLE_BASE}`, { signal: AbortSignal.timeout(4000) });
+    if (!reponse.ok) return 0;
+    const f = (await reponse.json()).fields || {};
+    const reduction = Number((f.reduction || {}).integerValue || (f.reduction || {}).doubleValue || 0);
+    const actif = !f.actif || f.actif.booleanValue !== false;
+    const debut = (f.debut || {}).stringValue;
+    const fin = (f.fin || {}).stringValue;
+    const maintenant = Date.now();
+    if (!actif || !Number.isInteger(reduction) || reduction < 1 || reduction > 90) return 0;
+    if (debut && maintenant < Date.parse(`${debut}T00:00:00+11:00`)) return 0;
+    if (fin && maintenant >= Date.parse(`${fin}T00:00:00+11:00`) + 86400000) return 0;
+    return reduction;
+  } catch (erreur) {
+    console.error('Code promo non vérifié :', erreur);
+    return 0;
   }
 }
 
@@ -123,6 +147,13 @@ module.exports = async (req, res) => {
     return res.status(400).json({ erreur: 'La demande est incomplète.' });
   }
 
+  // Code promo : gardé seulement s'il est valable dans la base.
+  const codeSaisi = ligne(corps.code, 30).toUpperCase().replace(/\s+/g, '');
+  if (codeSaisi) {
+    const reduction = await verifierCode(codeSaisi);
+    if (reduction) { d.code = codeSaisi; d.codeReduction = reduction; } else d.codeRefuse = codeSaisi;
+  }
+
   const pieces = [];
   let modele = null; // l'image jointe, rangée aussi dans la base pour le back-office
   const jointe = corps.modele;
@@ -146,6 +177,8 @@ module.exports = async (req, res) => {
     `E-mail : ${d.email}`,
     `Pays : ${d.pays}`,
     `Téléphone : ${d.telephone || 'non indiqué'}`,
+    ...(d.code ? [`Code promo : ${d.code} (−${d.codeReduction} %)`] : []),
+    ...(d.codeRefuse ? [`Code promo saisi mais non valable : ${d.codeRefuse} (le prix affiché peut le compter à tort)`] : []),
     `Pièce : ${d.piece}`,
     `Taille : ${d.taille}`,
     ...(d.prix ? [`Prix affiché : ${d.prix}`] : []),

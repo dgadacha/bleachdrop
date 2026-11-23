@@ -2,3 +2,6 @@
 .vercel
 .env*
 *.log
+
+# Photo d' origine du dessin du logo : gardée en local, le dépôt est public
+logo/dessin/dessin-original.jpg

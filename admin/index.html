@@ -8,13 +8,13 @@
   <meta name="theme-color" content="#000000">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Pirata+One&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/admin/admin.css">
 </head>
 <body>
 
   <header class="barre">
-    <a href="/" class="barre-nom"><img src="/images/logo-petit.webp" alt="bleach drop" width="440" height="261"></a>
+    <a href="/" class="barre-nom"><img src="/images/logo-petit.webp" alt="bleach drop" width="480" height="217"></a>
     <span class="barre-titre">Back-office</span>
     <button class="lien" id="deconnexion" hidden>Se déconnecter</button>
   </header>
@@ -42,7 +42,10 @@
       <nav class="onglets" role="tablist">
         <button role="tab" data-onglet="commandes" aria-selected="true">Commandes <span class="pastille" id="pastille-nouvelles" hidden></span></button>
         <button role="tab" data-onglet="articles" aria-selected="false">Articles</button>
+        <button role="tab" data-onglet="collections" aria-selected="false">Collections</button>
         <button role="tab" data-onglet="offres" aria-selected="false">Offres</button>
+        <button role="tab" data-onglet="codes" aria-selected="false">Codes promo</button>
+        <button role="tab" data-onglet="stencil" aria-selected="false">Stencil</button>
       </nav>
 
       <div data-panneau="commandes">
@@ -81,6 +84,15 @@
         </section>
       </div>
 
+      <div data-panneau="collections" hidden>
+        <div class="outils">
+          <p class="discret">Une collection limitée (un « drop ») a un lancement et une fin : avant, ses pièces sont cachées et la prochaine programmée affiche un décompte sur le site ; après la fin, elles quittent le site. Une collection permanente reste toujours en vente, sous le décompte.</p>
+          <button class="bouton" id="ajouter-collection">+ Collection</button>
+        </div>
+        <div class="liste" id="liste-collections"></div>
+        <p class="vide" id="collections-vides" hidden>Aucune collection pour l'instant : toutes les pièces en ligne sont en vente.</p>
+      </div>
+
       <div data-panneau="offres" hidden>
         <div class="outils">
           <p class="discret">Une offre baisse les prix d'un pourcentage pendant une période. Si deux offres visent la même pièce, la plus forte s'applique.</p>
@@ -93,8 +105,130 @@
           <span class="discret">−33 % sur les pièces et −27 % sur le sur-mesure, jusqu'au 24 décembre. Tu pourras la modifier ensuite.</span>
         </p>
       </div>
+      <div data-panneau="codes" hidden>
+        <div class="outils">
+          <p class="discret">Un code donne une réduction à qui le saisit dans le formulaire de commande. Il ne se cumule pas avec les offres : le client paie le prix le plus bas des deux. Idéal à imprimer sur une carte glissée avec chaque commande remise.</p>
+          <button class="bouton" id="ajouter-code">+ Code</button>
+        </div>
+        <div class="liste" id="liste-codes"></div>
+        <p class="vide" id="codes-vides" hidden>Aucun code pour l'instant.</p>
+      </div>
+
+      <div data-panneau="stencil" hidden>
+        <section class="carte convertisseur" aria-labelledby="titre-convertisseur">
+          <h2 id="titre-convertisseur">Transformer une image en pochoir</h2>
+          <p class="discret">Un dessin, une photo, un logo… Sur l'aperçu, le noir est à découper : c'est par là que passe la javel. Les ponts orange retiennent les morceaux qui tomberaient à la découpe, comme l'intérieur d'un O.</p>
+          <label class="bouton bouton-plein choisir-image">Choisir une image
+            <input type="file" id="image-pochoir" accept="image/*" hidden>
+          </label>
+          <p class="message" id="message-pochoir" role="status"></p>
+
+          <div class="atelier" id="atelier" hidden>
+            <form class="reglages-pochoir" id="reglages-pochoir">
+              <label>Nom <input name="nom" maxlength="60" placeholder="Araignée"></label>
+              <label>Largeur du motif (cm) <input name="largeurCm" type="number" inputmode="decimal" min="3" max="100" step="0.5" value="25"></label>
+              <fieldset>
+                <legend>À découper</legend>
+                <label class="case"><input type="radio" name="decoupe" value="foncees" checked> Les zones foncées</label>
+                <label class="case"><input type="radio" name="decoupe" value="claires"> Les zones claires</label>
+              </fieldset>
+              <label class="curseur"><span>Seuil <output data-valeur="seuil"></output></span>
+                <input type="range" name="seuil" min="1" max="255" value="128">
+              </label>
+              <label class="case"><input type="checkbox" name="seuilAuto" checked> Seuil automatique</label>
+              <label class="case"><input type="checkbox" name="egaliser"> Corriger l'éclairage (photo d'un dessin sur papier)</label>
+              <label class="curseur"><span>Lissage <output data-valeur="lissage"></output></span>
+                <input type="range" name="lissage" min="0" max="10" step="1" value="1">
+              </label>
+              <label class="curseur"><span>Supprimer les taches de moins de <output data-valeur="nettoyageMm"></output></span>
+                <input type="range" name="nettoyageMm" min="0" max="5" step="0.5" value="1">
+              </label>
+              <label class="case"><input type="checkbox" name="ponts" checked> Ajouter les ponts</label>
+              <label class="curseur"><span>Largeur des ponts <output data-valeur="pontMm"></output></span>
+                <input type="range" name="pontMm" min="1" max="6" step="0.5" value="2">
+              </label>
+              <label class="curseur"><span>Bord autour du motif <output data-valeur="margeCm"></output></span>
+                <input type="range" name="margeCm" min="1" max="6" step="0.5" value="2">
+              </label>
+            </form>
+
+            <div class="apercu-pochoir">
+              <div class="filtres" role="toolbar" aria-label="Aperçu">
+                <button type="button" class="filtre actif" data-vue="apercu">Découpe</button>
+                <button type="button" class="filtre" data-vue="tshirt">Sur le tee-shirt</button>
+              </div>
+              <canvas id="toile-pochoir" aria-label="Aperçu du pochoir"></canvas>
+              <p class="discret">Gomme : clique sur une zone noire pour la retirer (un cintre, une tache…). <button type="button" class="lien" id="annuler-gomme" hidden>Annuler</button></p>
+              <div id="infos-pochoir"></div>
+              <div class="actions">
+                <button type="button" class="bouton" id="telecharger-pochoir">Télécharger</button>
+                <button type="button" class="bouton" id="imprimer-pochoir">Imprimer</button>
+                <button type="button" class="bouton bouton-plein" id="enregistrer-pochoir">Enregistrer</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <h2>Bibliothèque</h2>
+        <p class="discret marge-bas">Les pochoirs enregistrés, prêts à réimprimer à la bonne taille. Au-delà d'une page, l'impression se fait en plusieurs feuilles A4 à assembler.</p>
+        <div class="liste" id="liste-pochoirs"></div>
+        <p class="vide" id="pochoirs-vides" hidden>Aucun pochoir enregistré pour l'instant. Choisis une image ci-dessus : une fois réglé, « Enregistrer » le range ici, prêt à réimprimer.</p>
+      </div>
     </section>
   </main>
+
+  <!-- Fiche d'une collection -->
+  <dialog id="fiche-collection">
+    <form method="dialog" id="formulaire-collection">
+      <h2 id="titre-fiche-collection">Collection</h2>
+      <label>Nom <input name="nom" required maxlength="40" placeholder="DROP 001"></label>
+      <label>Description courte (facultatif) <input name="description" maxlength="160" placeholder="Insectes et toiles, en série limitée"></label>
+      <fieldset>
+        <legend>Type</legend>
+        <label class="case"><input type="radio" name="type" value="limitee"> Limitée : en vente entre deux dates, avec décompte avant le lancement</label>
+        <label class="case"><input type="radio" name="type" value="permanente"> Permanente : toujours en vente</label>
+        <div class="deux" id="dates-collection">
+          <label>Lancement <input name="debut" type="datetime-local"></label>
+          <label>Fin <input name="fin" type="datetime-local"></label>
+        </div>
+        <p class="discret" id="aide-dates-collection">Heure de Nouméa. Seule la prochaine collection limitée programmée affiche son décompte.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Pièces de la collection</legend>
+        <div class="choix-articles choix-collection" id="choix-pieces-collection"></div>
+        <p class="discret">Une pièce n'appartient qu'à une collection : la cocher ici la retire de l'autre.</p>
+      </fieldset>
+      <label class="case"><input type="checkbox" name="visible"> Afficher sur le site</label>
+      <p class="message" id="message-collection" role="status"></p>
+      <div class="actions">
+        <button type="button" class="bouton" data-fermer>Annuler</button>
+        <button type="submit" class="bouton bouton-plein">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Fiche d'un code promo -->
+  <dialog id="fiche-code">
+    <form method="dialog" id="formulaire-code">
+      <h2 id="titre-fiche-code">Code promo</h2>
+      <div class="deux">
+        <label>Code <input name="code" required maxlength="20" pattern="[A-Za-z0-9\-]{3,20}" autocomplete="off" placeholder="MERCI15"></label>
+        <label>Réduction (%) <input name="reduction" type="number" inputmode="numeric" min="1" max="90" step="1" required placeholder="15"></label>
+      </div>
+      <button type="button" class="lien" id="proposer-code">Proposer un code au hasard</button>
+      <p class="discret">Lettres, chiffres et tirets, 3 à 20 caractères. Le code ne peut plus être changé une fois créé.</p>
+      <div class="deux">
+        <label>Valable à partir du <input name="debut" type="date"></label>
+        <label>Jusqu'au (compris, facultatif) <input name="fin" type="date"></label>
+      </div>
+      <label class="case"><input type="checkbox" name="actif"> Code actif</label>
+      <p class="message" id="message-code" role="status"></p>
+      <div class="actions">
+        <button type="button" class="bouton" data-fermer>Annuler</button>
+        <button type="submit" class="bouton bouton-plein">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Fiche d'une offre -->
   <dialog id="fiche-offre">
@@ -134,6 +268,9 @@
       <label>Description courte <input name="note" maxlength="160" placeholder="Javel sur coton noir · face et dos"></label>
       <label>Prix <input name="prix" maxlength="40" placeholder="6 000 XPF"></label>
       <label class="case"><input type="checkbox" name="visible"> En ligne sur le site</label>
+      <label>Collection
+        <select name="collection" id="collection-article"></select>
+      </label>
 
       <fieldset>
         <legend>Photos</legend>
@@ -208,6 +345,10 @@
       </div>
     </div>
   </dialog>
+
+  <!-- Pages d'un pochoir à imprimer (visibles seulement à l'impression) -->
+  <div id="impression"></div>
+  <style id="page-impression"></style>
 
   <script type="module" src="/admin/admin.js"></script>
 </body>

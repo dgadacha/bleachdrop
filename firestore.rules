@@ -32,7 +32,29 @@ service cloud.firestore {
       allow write: if estAdmin();
     }
 
+    // Codes promo : l'identifiant du document est le code lui-même. On peut lire
+    // un code qu'on connaît (pour le vérifier), mais personne ne peut les lister.
+    match /codes/{code} {
+      allow get: if true;
+      allow list, write: if estAdmin();
+    }
+
     // Réglages du site (motif sur mesure…) : lus par le site, modifiés par les admins.
+    // Collections (« drops ») : le site lit celles affichées, pour le décompte
+    // de lancement et le classement des pièces.
+    match /collections/{id} {
+      allow read: if resource.data.visible == true || estAdmin();
+      allow write: if estAdmin();
+    }
+
+    // Pochoirs du back-office : la fiche (avec une miniature) et l'image en grand.
+    match /pochoirs/{id} {
+      allow read, write: if estAdmin();
+    }
+    match /pochoirsImages/{id} {
+      allow read, write: if estAdmin();
+    }
+
     match /reglages/{id} {
       allow get: if true;
       allow list, write: if estAdmin();
@@ -62,7 +84,7 @@ service cloud.firestore {
     // tailles bornées, statut imposé, date à l'heure du serveur.
     function commandeDuSite() {
       let d = request.resource.data;
-      return d.keys().hasOnly(['nom', 'email', 'pays', 'telephone', 'piece', 'taille', 'prix', 'message', 'modeleJoint', 'modeleId', 'statut', 'source', 'creeLe'])
+      return d.keys().hasOnly(['nom', 'email', 'pays', 'telephone', 'piece', 'taille', 'prix', 'message', 'modeleJoint', 'modeleId', 'code', 'codeReduction', 'statut', 'source', 'creeLe'])
         && d.keys().hasAll(['nom', 'email', 'piece', 'taille', 'statut', 'source', 'creeLe'])
         && d.nom is string && d.nom.size() >= 2 && d.nom.size() <= 100
         && d.email is string && d.email.size() <= 200 && d.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]{2,}$')
@@ -74,6 +96,8 @@ service cloud.firestore {
         && (!('message' in d) || (d.message is string && d.message.size() <= 4000))
         && (!('modeleJoint' in d) || d.modeleJoint is bool)
         && (!('modeleId' in d) || (d.modeleId is string && d.modeleId.size() <= 40))
+        && (!('code' in d) || (d.code is string && d.code.matches('^[A-Z0-9-]{3,20}$')))
+        && (!('codeReduction' in d) || (d.codeReduction is int && d.codeReduction >= 1 && d.codeReduction <= 90))
         && d.statut == 'nouvelle'
         && d.source == 'site'
         && d.creeLe is timestamp

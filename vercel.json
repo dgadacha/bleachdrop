@@ -1,0 +1,16 @@
+{
+  "redirects": [
+    {
+      "source": "/:chemin*",
+      "has": [{ "type": "host", "value": "www.bleachdrop.com" }],
+      "destination": "https://bleachdrop.com/:chemin*",
+      "permanent": true
+    },
+    {
+      "source": "/:chemin*",
+      "has": [{ "type": "host", "value": "bleachdrop.vercel.app" }],
+      "destination": "https://bleachdrop.com/:chemin*",
+      "permanent": true
+    }
+  ]
+}

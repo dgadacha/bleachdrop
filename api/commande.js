@@ -4,7 +4,13 @@
 //   RESEND_API_KEY   la clé d'API Resend
 //   COMMANDES_EMAIL  l'adresse qui reçoit les commandes
 //   COMMANDES_FROM   (facultatif) l'expéditeur, une fois un domaine vérifié
-//                    chez Resend. Par défaut : l'adresse d'essai de Resend.
+//                    chez Resend, par ex. « bleach drop <commandes@bleachdrop.nc> ».
+//                    Par défaut : l'adresse d'essai de Resend.
+//
+// Le client ne reçoit son e-mail de confirmation que si COMMANDES_FROM est
+// réglé : avec l'adresse d'essai, Resend n'envoie qu'au titulaire du compte.
+
+const { emailConfirmation } = require('../lib/email-confirmation');
 
 const TYPES_IMAGE = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const TAILLE_MAX_BASE64 = 4000000; // environ 3 Mo d'image
@@ -139,5 +145,34 @@ module.exports = async (req, res) => {
     return res.status(502).json({ erreur: 'L\'envoi a échoué. Réessayez dans un instant.' });
   }
 
-  return res.status(200).json({ ok: true });
+  const confirmation = await confirmerAuClient(cle, destinataire, d, pieces.length > 0);
+  return res.status(200).json({ ok: true, confirmation });
 };
+
+// Envoie au client l'e-mail de confirmation. N'empêche jamais la commande :
+// en cas d'échec, Maya a déjà reçu la demande, on le note simplement.
+async function confirmerAuClient(cle, adresseMaya, d, modeleJoint) {
+  const expediteur = process.env.COMMANDES_FROM;
+  if (!expediteur) return false; // pas de domaine vérifié : Resend refuserait
+  const mail = emailConfirmation({ ...d, modeleJoint });
+  try {
+    const reponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cle}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: expediteur,
+        to: [d.email],
+        reply_to: adresseMaya, // le client répond directement à Maya
+        subject: mail.sujet,
+        html: mail.html,
+        text: mail.texte,
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!reponse.ok) console.error('Confirmation au client refusée :', reponse.status, await reponse.text());
+    return reponse.ok;
+  } catch (erreur) {
+    console.error('Confirmation au client non envoyée :', erreur);
+    return false;
+  }
+}

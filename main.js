@@ -591,7 +591,12 @@ async function envoyer(d) {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ ...champs, modele }),
     });
-    if (reponse.ok) return 'Demande envoyée. Vous recevrez une réponse par e-mail.';
+    if (reponse.ok) {
+      const resultat = await reponse.json().catch(() => ({}));
+      return resultat.confirmation
+        ? 'Demande envoyée. Un e-mail de confirmation vient de partir : pensez à regarder dans vos indésirables.'
+        : 'Demande envoyée. Vous recevrez une réponse par e-mail.';
+    }
 
     // Envoi indisponible (pas encore réglé, ou site ouvert hors de Vercel) : secours.
     if ([404, 405, 501, 503].includes(reponse.status) && REGLAGES.email) return ouvrirMessagerie(d, sujet);

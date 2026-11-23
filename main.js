@@ -14,7 +14,7 @@ const REGLAGES = {
   //  - email : à défaut, le site ouvre la messagerie du visiteur
   //    avec le message déjà écrit.
   adresseFormulaire: '',
-  email: '',
+  email: 'maya.moucho@gmail.com',
 
   // Liens du pied de page (laisser vide pour masquer).
   instagram: '',

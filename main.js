@@ -24,20 +24,18 @@ const REGLAGES = {
 
   tailles: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
 
-  // Réduction de lancement, appliquée d'office à tous les prix.
-  // Mettre `reduction: 0` pour l'arrêter tout de suite.
-  //  reduction : en pourcentage.
-  //  fin       : la réduction s'arrête à cette date et heure (ici le
-  //              25 décembre à minuit, heure de Nouméa). Passé ce moment,
-  //              les prix normaux reviennent tout seuls.
+  // Offre de lancement : jusqu'à la date `fin`, chaque pièce est vendue
+  // à son `prixLancement`. Ensuite le prix normal revient tout seul.
+  // Mettre `fin: ''` pour arrêter l'offre tout de suite.
+  //  fin : ici le 25 décembre à minuit, heure de Nouméa.
   promo: {
-    reduction: 20,
     fin: '2026-12-25T00:00:00+11:00',
     finTexte: 'avant le 25 décembre',
   },
 
   // Tarif normal du motif sur mesure, affiché près du formulaire (vide = masqué).
-  prixSurMesure: 'à partir de 6 500 XPF',
+  prixSurMesure: 'à partir de 9 000 XPF',
+  prixSurMesureLancement: 'à partir de 6 500 XPF',
 
   // La photo montrée en premier dans la galerie, quand une pièce en a plusieurs.
   vueParDefaut: 'Dos',
@@ -48,8 +46,8 @@ const REGLAGES = {
   // Les pièces de la galerie.
   //  photos : une ou plusieurs images, avec une légende (Face, Dos…).
   //           Liste vide = un visuel provisoire est dessiné à la place.
-  //  prix       : prix normal, par ex. '5 000 XPF'. Vide = « Prix sur demande ».
-  //               La réduction de lancement s'applique dessus toute seule.
+  //  prix          : prix normal, par ex. '7 500 XPF'. Vide = « Prix sur demande ».
+  //  prixLancement : prix pendant l'offre de lancement (vide = pas d'offre sur cette pièce).
   //  prixNormal : prix affiché barré à côté (laisser vide pour ne rien barrer).
   //  mention    : petit texte sous le prix, par ex. 'Prix de lancement'.
   pieces: [
@@ -60,7 +58,8 @@ const REGLAGES = {
         { fichier: 'images/araignee-face.webp', legende: 'Face' },
         { fichier: 'images/araignee-dos.webp', legende: 'Dos' },
       ],
-      prix: '5 000 XPF',
+      prix: '7 500 XPF',
+      prixLancement: '5 000 XPF',
       prixNormal: '',
       mention: '',
     },
@@ -71,7 +70,8 @@ const REGLAGES = {
         { fichier: 'images/centipede-face.webp', legende: 'Face' },
         { fichier: 'images/centipede-dos.webp', legende: 'Dos' },
       ],
-      prix: '5 000 XPF',
+      prix: '7 500 XPF',
+      prixLancement: '5 000 XPF',
       prixNormal: '',
       mention: '',
     },
@@ -82,7 +82,8 @@ const REGLAGES = {
         { fichier: 'images/magma-face.webp', legende: 'Face' },
         { fichier: 'images/magma-dos.webp', legende: 'Dos' },
       ],
-      prix: '5 000 XPF',
+      prix: '7 500 XPF',
+      prixLancement: '5 000 XPF',
       prixNormal: '',
       mention: '',
     },
@@ -181,12 +182,12 @@ function visuelProvisoire(index) {
     + `</svg><span class="a-venir">Photo à venir</span>`;
 }
 
-// Le prix d'une pièce : réduit d'office pendant l'offre, normal sinon.
+// Le prix d'une pièce : prix de lancement pendant l'offre, prix normal sinon.
 function baliseprix(piece) {
   if (!piece.prix) return '<strong>Prix sur demande</strong>';
-  if (promoActive()) {
-    return `<s>${echapper(piece.prix)}</s> <strong>${echapper(prixReduit(piece.prix))}</strong>`
-      + `<small>−${REGLAGES.promo.reduction} % ${echapper(REGLAGES.promo.finTexte)}</small>`;
+  if (promoActive() && piece.prixLancement) {
+    return `<s>${echapper(piece.prix)}</s> <strong>${echapper(piece.prixLancement)}</strong>`
+      + '<small>Prix de lancement</small>';
   }
   return (piece.prixNormal ? `<s>${echapper(piece.prixNormal)}</s> ` : '')
     + `<strong>${echapper(piece.prix)}</strong>`
@@ -256,8 +257,8 @@ function poserGalerie() {
 function poserListes() {
   const option = (valeur, texte = valeur) => `<option value="${echapper(valeur)}">${echapper(texte)}</option>`;
   document.getElementById('piece').innerHTML = option('', 'Choisir…')
-    + REGLAGES.pieces.map((p) => option(p.titre, p.prix ? `${p.titre} — ${prixActuel(p.prix)}` : p.titre)).join('')
-    + option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${prixActuel(REGLAGES.prixSurMesure)}` : SUR_MESURE);
+    + REGLAGES.pieces.map((p) => option(p.titre, p.prix ? `${p.titre} — ${prixActuel(p.prix, p.prixLancement)}` : p.titre)).join('')
+    + option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${prixActuel(REGLAGES.prixSurMesure, REGLAGES.prixSurMesureLancement)}` : SUR_MESURE);
   document.getElementById('taille').innerHTML = option('', 'Choisir…')
     + REGLAGES.tailles.map((t) => option(t)).join('');
 }
@@ -270,30 +271,20 @@ function poserPied() {
 }
 
 // ============================================================
-//  Réduction de lancement
+//  Offre de lancement
 // ============================================================
-const promoActive = () => Boolean(REGLAGES.promo && REGLAGES.promo.reduction > 0)
+const promoActive = () => Boolean(REGLAGES.promo && REGLAGES.promo.fin)
   && Date.now() < new Date(REGLAGES.promo.fin).getTime();
 
-// Applique la réduction au montant écrit dans un texte :
-// '5 000 XPF' donne '4 000 XPF', 'à partir de 6 500 XPF' donne 'à partir de 5 200 XPF'.
-function prixReduit(texte) {
-  return texte.replace(/\d[\d\s\u00a0\u202f]*\d|\d/, (nombre) => {
-    const montant = parseInt(nombre.replace(/\D/g, ''), 10);
-    const reduit = Math.round(montant * (100 - REGLAGES.promo.reduction) / 100);
-    return String(reduit).replace(/\B(?=(\d{3})+$)/g, ' ');
-  });
-}
-
 // Le prix en vigueur aujourd'hui.
-const prixActuel = (texte) => (promoActive() ? prixReduit(texte) : texte);
+const prixActuel = (normal, lancement) => (promoActive() && lancement ? lancement : normal);
 
 function poserPromo() {
   const actif = promoActive();
   document.querySelectorAll('[data-promo]').forEach((el) => {
     el.hidden = !actif;
     if (actif) {
-      el.innerHTML = `Offre de lancement · <strong>−${REGLAGES.promo.reduction} %</strong> sur toute commande ${echapper(REGLAGES.promo.finTexte)}`;
+      el.innerHTML = `Offre de lancement · <strong>prix réduits</strong> sur toute commande ${echapper(REGLAGES.promo.finTexte)}`;
     }
   });
 }
@@ -406,11 +397,12 @@ function brancherFormulaire() {
     };
 
     // Le prix vu par le client au moment de sa demande, pour que Maya le retrouve.
-    const tarif = d.piece === SUR_MESURE
-      ? REGLAGES.prixSurMesure
-      : (REGLAGES.pieces.find((p) => p.titre === d.piece) || {}).prix;
-    if (tarif) {
-      d.prix = prixActuel(tarif) + (promoActive() ? ` (−${REGLAGES.promo.reduction} % de lancement, prix normal ${tarif})` : '');
+    const fiche = REGLAGES.pieces.find((p) => p.titre === d.piece) || {};
+    const normal = d.piece === SUR_MESURE ? REGLAGES.prixSurMesure : fiche.prix;
+    const lancement = d.piece === SUR_MESURE ? REGLAGES.prixSurMesureLancement : fiche.prixLancement;
+    if (normal) {
+      const actuel = prixActuel(normal, lancement);
+      d.prix = actuel + (actuel !== normal ? ` (prix de lancement, prix normal ${normal})` : '');
     }
 
     const erreurs = verifier(d);

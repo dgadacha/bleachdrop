@@ -510,10 +510,22 @@ function poserPromo() {
 // ============================================================
 //  Formulaire de commande
 // ============================================================
+// Numéro calédonien : 6 chiffres, avec ou sans +687 ou 00687 devant.
+// Renvoie '+687 75 12 34', '' si le champ est vide, ou null si le numéro n'est pas valable.
+function telephoneNC(texte) {
+  if (!String(texte || '').trim()) return '';
+  let chiffres = String(texte).replace(/\D/g, '');
+  if (chiffres.startsWith('00687')) chiffres = chiffres.slice(5);
+  else if (chiffres.length === 9 && chiffres.startsWith('687')) chiffres = chiffres.slice(3);
+  if (!/^\d{6}$/.test(chiffres)) return null;
+  return `+687 ${chiffres.replace(/(\d{2})(?=\d)/g, '$1 ')}`;
+}
+
 function verifier(d) {
   const erreurs = {};
-  if (d.nom.length < 2) erreurs.nom = 'Indiquez votre nom.';
+  if (d.nom.length < 2) erreurs.nom = 'Indiquez votre prénom et votre nom.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) erreurs.email = 'Indiquez une adresse e-mail valide.';
+  if (d.telephone === null) erreurs.telephone = 'Indiquez un numéro calédonien à 6 chiffres, ou laissez vide.';
   if (!d.piece) erreurs.piece = 'Choisissez une pièce, ou « Motif sur mesure ».';
   if (!d.taille) erreurs.taille = 'Choisissez une taille.';
   if (d.fichier && !/^image\//.test(d.fichier.type)) erreurs.modele = 'Le modèle doit être une image (photo ou dessin).';
@@ -524,8 +536,9 @@ function verifier(d) {
 
 function ecrireMessage(d) {
   return [
-    `Nom : ${d.nom}`,
+    `Prénom et nom : ${d.nom}`,
     `E-mail : ${d.email}`,
+    ...(d.telephone ? [`Téléphone : ${d.telephone}`] : []),
     `Pièce : ${d.piece}`,
     `Taille : ${d.taille}`,
     ...(d.prix ? [`Prix affiché : ${d.prix}`] : []),
@@ -610,7 +623,8 @@ function brancherFormulaire() {
     const brut = Object.fromEntries(new FormData(formulaire));
     if (brut.site) return; // un robot a rempli le champ caché
     const d = {
-      nom: brut.nom.trim(), email: brut.email.trim(), piece: brut.piece, taille: brut.taille, message: brut.message.trim(),
+      nom: brut.nom.trim(), email: brut.email.trim(), telephone: telephoneNC(brut.telephone),
+      piece: brut.piece, taille: brut.taille, message: brut.message.trim(),
       fichier: brut.modele && brut.modele.size ? brut.modele : null,
     };
 

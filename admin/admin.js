@@ -143,6 +143,8 @@ function carteCommande(c) {
   const date = c.creeLe && c.creeLe.toDate ? c.creeLe.toDate().toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }) : '';
   const contact = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email || '')
     ? `<a href="mailto:${echapper(c.email)}">${echapper(c.email)}</a>` : echapper(c.email || '');
+  // Le téléphone se touche pour appeler depuis un portable.
+  const tel = c.telephone ? `<a href="tel:${echapper(c.telephone.replace(/\s/g, ''))}">${echapper(c.telephone)}</a>` : '';
   const choix = (liste, valeur) => liste.map(([v, nom]) => `<option value="${echapper(v)}"${v === (valeur || '') ? ' selected' : ''}>${echapper(nom || '—')}</option>`).join('');
   return `<article class="carte" data-id="${echapper(c.id)}">
     <div class="carte-tete">
@@ -154,7 +156,7 @@ function carteCommande(c) {
       <span class="date">${echapper(date)}</span>
     </div>
     <div class="carte-corps">
-      ${contact ? `<span>${contact}</span>` : ''}
+      ${contact || tel ? `<span>${[contact, tel].filter(Boolean).join(' · ')}</span>` : ''}
       ${c.prix ? `<span class="discret">Prix affiché : ${echapper(c.prix)}</span>` : ''}
       ${c.message ? `<p class="texte">${echapper(c.message)}</p>` : ''}
     </div>
@@ -212,7 +214,8 @@ $('formulaire-commande').addEventListener('submit', async (e) => {
   const f = e.target;
   try {
     await addDoc(collection(db, 'commandes'), {
-      nom: f.nom.value.trim(), email: f.email.value.trim(), piece: f.piece.value.trim(), taille: f.taille.value,
+      nom: f.nom.value.trim(), email: f.email.value.trim(), telephone: f.telephone.value.trim(),
+      piece: f.piece.value.trim(), taille: f.taille.value,
       message: f.message.value.trim(), statut: 'acceptee', source: 'manuel', creeLe: serverTimestamp(),
     });
     $('fiche-commande').close();

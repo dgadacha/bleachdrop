@@ -389,6 +389,13 @@ h2 {
 .erreur { min-height: 1.4em; margin-top: 4px; font-size: 12px; color: var(--blanc); }
 .erreur:not(:empty)::before { content: "† "; }
 
+.tel { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #555; }
+.tel:focus-within { border-color: var(--blanc); }
+.tel-indicatif { font: 300 16px/1.5 var(--mono); color: var(--gris); }
+.champ .tel input { border-bottom: 0; }
+.champ.invalide .tel { border-bottom: 1px dashed var(--blanc); }
+.discret-champ { margin-top: 6px; font-size: 11px; color: var(--gris); }
+
 .prix-choisi { margin-top: 8px; font-size: 12px; line-height: 1.5; color: #cfcfcb; }
 .prix-choisi:empty { display: none; }
 

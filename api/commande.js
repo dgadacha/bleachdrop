@@ -28,6 +28,7 @@ async function enregistrer(d, modeleJoint) {
     source: texte('site'),
     creeLe: { timestampValue: new Date().toISOString() },
   };
+  if (d.telephone) champs.telephone = texte(d.telephone);
   if (d.prix) champs.prix = texte(d.prix);
   if (d.message) champs.message = texte(d.message);
   try {
@@ -68,6 +69,8 @@ module.exports = async (req, res) => {
   const d = {
     nom: ligne(corps.nom, 100),
     email: ligne(corps.email, 200),
+    // Numéro déjà mis en forme par le site ; tout autre format est ignoré.
+    telephone: /^\+687 \d{2} \d{2} \d{2}$/.test(ligne(corps.telephone, 30)) ? ligne(corps.telephone, 30) : '',
     piece: ligne(corps.piece, 100),
     taille: ligne(corps.taille, 10),
     prix: ligne(corps.prix, 200),
@@ -95,8 +98,9 @@ module.exports = async (req, res) => {
   const enregistree = await enregistrer(d, pieces.length > 0);
 
   const texte = [
-    `Nom : ${d.nom}`,
+    `Prénom et nom : ${d.nom}`,
     `E-mail : ${d.email}`,
+    `Téléphone : ${d.telephone || 'non indiqué'}`,
     `Pièce : ${d.piece}`,
     `Taille : ${d.taille}`,
     ...(d.prix ? [`Prix affiché : ${d.prix}`] : []),

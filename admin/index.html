@@ -166,8 +166,11 @@
     <form method="dialog" id="formulaire-commande">
       <h2>Commande à la main</h2>
       <p class="discret">Pour une commande reçue en message ou de vive voix.</p>
-      <label>Client <input name="nom" required maxlength="100"></label>
-      <label>Contact (e-mail, Instagram, téléphone) <input name="email" maxlength="200"></label>
+      <label>Client (prénom et nom) <input name="nom" required maxlength="100"></label>
+      <div class="deux">
+        <label>Contact (e-mail, Instagram…) <input name="email" maxlength="200"></label>
+        <label>Téléphone <input name="telephone" type="tel" maxlength="30" placeholder="+687 75 12 34"></label>
+      </div>
       <div class="deux">
         <label>Pièce <input name="piece" required maxlength="100" list="noms-articles"></label>
         <label>Taille

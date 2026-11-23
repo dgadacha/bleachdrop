@@ -283,8 +283,8 @@ h2 {
 
 .piece-infos h3 { font: 400 13px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .piece-prix { font-size: 12px; color: var(--gris); white-space: nowrap; text-align: right; }
-.piece-prix strong { font-family: var(--gothique); font-weight: 400; font-size: 24px; line-height: 1; letter-spacing: .02em; color: var(--blanc); }
-.piece-prix s { font-family: var(--gothique); font-size: 16px; margin-right: 8px; }
+.piece-prix strong { font-weight: 500; font-size: 15px; color: var(--blanc); }
+.piece-prix s { margin-right: 6px; }
 .piece-prix small { display: block; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
 .piece-note { padding: 0 16px; font-size: 12px; color: var(--gris); }
 

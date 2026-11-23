@@ -17,7 +17,7 @@ const REGLAGES = {
   //    le site ouvre la messagerie du visiteur avec le message déjà écrit.
   //    Laisser vide pour ne pas afficher d'adresse sur le site.
   adresseFormulaire: '/api/commande',
-  email: 'maya.moucho@gmail.com',
+  email: '',
 
   // Liens du pied de page (laisser vide pour masquer).
   instagram: '',

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>bleach drop — back-office</title>
+  <meta name="theme-color" content="#000000">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Pirata+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+
+  <header class="barre">
+    <a href="/" class="barre-nom"><img src="/images/logo-petit.webp" alt="bleach drop" width="440" height="261"></a>
+    <span class="barre-titre">Back-office</span>
+    <button class="lien" id="deconnexion" hidden>Se déconnecter</button>
+  </header>
+
+  <main>
+    <!-- Écran de connexion -->
+    <section class="ecran" id="ecran-connexion" hidden>
+      <h1>Connexion</h1>
+      <p>Le back-office est réservé à Maya et Dylan. La connexion se fait avec un compte Google.</p>
+      <button class="bouton bouton-plein" id="connexion">Se connecter avec Google</button>
+      <p class="message" id="message-connexion" role="status"></p>
+    </section>
+
+    <!-- Connecté, mais pas autorisé -->
+    <section class="ecran" id="ecran-refus" hidden>
+      <h1>Accès à valider</h1>
+      <p>Tu es bien connecté, mais ce compte n'est pas encore autorisé à gérer le site.</p>
+      <p>Transmets cet identifiant à Dylan pour qu'il l'ajoute :</p>
+      <p class="identifiant"><code id="identifiant"></code> <button class="lien" id="copier-identifiant">Copier</button></p>
+      <p class="discret" id="compte-refus"></p>
+    </section>
+
+    <!-- Le back-office -->
+    <section id="ecran-admin" hidden>
+      <nav class="onglets" role="tablist">
+        <button role="tab" data-onglet="commandes" aria-selected="true">Commandes <span class="pastille" id="pastille-nouvelles" hidden></span></button>
+        <button role="tab" data-onglet="articles" aria-selected="false">Articles</button>
+      </nav>
+
+      <div data-panneau="commandes">
+        <dl class="chiffres" id="chiffres"></dl>
+        <div class="outils">
+          <label>Afficher
+            <select id="filtre-statut">
+              <option value="actives">En cours</option>
+              <option value="toutes">Toutes</option>
+              <option value="nouvelle">Nouvelles</option>
+              <option value="acceptee">Acceptées</option>
+              <option value="en-cours">En fabrication</option>
+              <option value="remise">Remises</option>
+              <option value="annulee">Annulées</option>
+            </select>
+          </label>
+          <button class="bouton" id="ajouter-commande">+ Commande à la main</button>
+        </div>
+        <div class="liste" id="liste-commandes"></div>
+      </div>
+
+      <div data-panneau="articles" hidden>
+        <div class="outils">
+          <p class="discret">Les articles « en ligne » apparaissent sur le site, dans cet ordre.</p>
+          <button class="bouton" id="ajouter-article">+ Article</button>
+        </div>
+        <div class="liste" id="liste-articles"></div>
+        <p class="vide" id="articles-vides" hidden>
+          Aucun article dans la base : le site affiche ses trois pièces d'origine.
+          <button class="bouton" id="importer-articles">Importer les pièces du site</button>
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Fiche d'un article -->
+  <dialog id="fiche-article">
+    <form method="dialog" id="formulaire-article">
+      <h2 id="titre-fiche-article">Article</h2>
+      <label>Nom <input name="titre" required maxlength="80"></label>
+      <label>Description courte <input name="note" maxlength="160" placeholder="Javel sur coton noir · face et dos"></label>
+      <div class="deux">
+        <label>Prix normal <input name="prix" maxlength="40" placeholder="7 500 XPF"></label>
+        <label>Prix de lancement <input name="prixLancement" maxlength="40" placeholder="5 000 XPF"></label>
+      </div>
+      <label class="case"><input type="checkbox" name="visible"> En ligne sur le site</label>
+
+      <fieldset>
+        <legend>Photos</legend>
+        <div class="photos" id="photos-article"></div>
+        <label class="bouton ajout-photo">+ Ajouter une photo
+          <input type="file" id="ajout-photo" accept="image/*" hidden>
+        </label>
+        <p class="discret">La photo est réduite avant l'envoi. Le dos s'affiche en premier sur le site.</p>
+      </fieldset>
+
+      <p class="message" id="message-article" role="status"></p>
+      <div class="actions">
+        <button type="button" class="bouton" data-fermer>Annuler</button>
+        <button type="submit" class="bouton bouton-plein">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Commande saisie à la main -->
+  <dialog id="fiche-commande">
+    <form method="dialog" id="formulaire-commande">
+      <h2>Commande à la main</h2>
+      <p class="discret">Pour une commande reçue en message ou de vive voix.</p>
+      <label>Client <input name="nom" required maxlength="100"></label>
+      <label>Contact (e-mail, Instagram, téléphone) <input name="email" maxlength="200"></label>
+      <div class="deux">
+        <label>Pièce <input name="piece" required maxlength="100" list="noms-articles"></label>
+        <label>Taille
+          <select name="taille"><option>XS</option><option>S</option><option selected>M</option><option>L</option><option>XL</option><option>XXL</option></select>
+        </label>
+      </div>
+      <datalist id="noms-articles"></datalist>
+      <label>Message ou détails <textarea name="message" rows="3" maxlength="4000"></textarea></label>
+      <p class="message" id="message-commande" role="status"></p>
+      <div class="actions">
+        <button type="button" class="bouton" data-fermer>Annuler</button>
+        <button type="submit" class="bouton bouton-plein">Ajouter</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/admin/admin.js"></script>
+</body>
+</html>

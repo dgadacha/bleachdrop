@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Règles de la base bleach drop.
+//  - articles et photos : tout le monde lit ce qui est en ligne, seuls les admins écrivent.
+//  - commandes : le site peut en créer une (et rien d'autre), seuls les admins les lisent.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Les comptes autorisés dans le back-office, par identifiant Firebase.
+    // « Connecté avec Google » ne suffit pas : n'importe qui peut l'être.
+    function estAdmin() {
+      return request.auth != null && request.auth.uid in [
+        'A_REMPLACER_UID_1',
+        'A_REMPLACER_UID_2'
+      ];
+    }
+
+    match /articles/{id} {
+      allow read: if resource.data.visible == true || estAdmin();
+      allow write: if estAdmin();
+    }
+
+    match /photos/{id} {
+      allow get: if true;
+      allow list, write: if estAdmin();
+    }
+
+    match /commandes/{id} {
+      allow read, update, delete: if estAdmin();
+      allow create: if estAdmin() || commandeDuSite();
+    }
+
+    // Une commande envoyée par le formulaire du site : champs connus,
+    // tailles bornées, statut imposé, date à l'heure du serveur.
+    function commandeDuSite() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['nom', 'email', 'piece', 'taille', 'prix', 'message', 'modeleJoint', 'statut', 'source', 'creeLe'])
+        && d.keys().hasAll(['nom', 'email', 'piece', 'taille', 'statut', 'source', 'creeLe'])
+        && d.nom is string && d.nom.size() >= 2 && d.nom.size() <= 100
+        && d.email is string && d.email.size() <= 200 && d.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]{2,}$')
+        && d.piece is string && d.piece.size() >= 1 && d.piece.size() <= 100
+        && d.taille is string && d.taille.size() >= 1 && d.taille.size() <= 10
+        && (!('prix' in d) || (d.prix is string && d.prix.size() <= 200))
+        && (!('message' in d) || (d.message is string && d.message.size() <= 4000))
+        && (!('modeleJoint' in d) || d.modeleJoint is bool)
+        && d.statut == 'nouvelle'
+        && d.source == 'site'
+        && d.creeLe is timestamp
+        && d.creeLe > request.time - duration.value(5, 'm')
+        && d.creeLe < request.time + duration.value(5, 'm');
+    }
+  }
+}

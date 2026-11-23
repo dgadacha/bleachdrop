@@ -92,6 +92,15 @@ const REGLAGES = {
 
 const SUR_MESURE = 'Motif sur mesure';
 
+// La base Firebase où le back-office (/admin) range les articles.
+// Ces deux valeurs sont publiques par nature : ce sont les règles de la base
+// (firestore.rules) qui décident de ce que chacun peut lire ou écrire.
+// Les pièces ci-dessus servent de secours si la base ne répond pas.
+const FIREBASE = {
+  projet: 'bleachdrop-nc',
+  cle: 'AIzaSyAGG1HBm9Unhi_Y8msKJnOYb10JliiT4Lc',
+};
+
 // ============================================================
 //  Motif dessiné : une colonne de vertèbres hérissée d'épines
 // ============================================================
@@ -194,18 +203,30 @@ function baliseprix(piece) {
     + (piece.mention ? `<small>${echapper(piece.mention)}</small>` : '');
 }
 
+// Une photo vient soit d'un fichier du site (`fichier`), soit de la base
+// (`photoId`) : dans ce cas l'image est remplie après coup par chargerPhotos().
+const PIXEL_VIDE = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+function baliseImage(photo, classe, alt, paresseux) {
+  const source = photo.fichier
+    ? `src="${echapper(photo.fichier)}"`
+    : `src="${PIXEL_VIDE}" data-photo="${echapper(photo.photoId || '')}"`;
+  return `<img class="${classe}" ${source} alt="${alt}"${paresseux && photo.fichier ? ' loading="lazy"' : ''}>`;
+}
+
 // À l'accueil, sur grand écran : les créations défilent à droite du logo.
+let minuterieAccueil = null;
 function poserAccueil() {
   const cadre = document.getElementById('hero-visuel');
   const photos = REGLAGES.pieces.flatMap((piece) => piece.photos || []);
   // Les dos d'abord : c'est là que sont les grands motifs.
   photos.sort((a, b) => (b.legende === 'Dos') - (a.legende === 'Dos'));
-  cadre.innerHTML = photos.map((photo, n) => `<img class="${n ? '' : 'active'}" src="${echapper(photo.fichier)}" alt="">`).join('');
+  cadre.innerHTML = photos.map((photo, n) => baliseImage(photo, n ? '' : 'active', '', false)).join('');
 
+  clearInterval(minuterieAccueil);
   const images = cadre.querySelectorAll('img');
   if (images.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   let courante = 0;
-  setInterval(() => {
+  minuterieAccueil = setInterval(() => {
     images[courante].classList.remove('active');
     courante = (courante + 1) % images.length;
     images[courante].classList.add('active');
@@ -222,12 +243,12 @@ function poserGalerie() {
     if (!photos.length) {
       visuel = visuelProvisoire(i);
     } else if (photos.length === 1) {
-      visuel = `<img class="vue active" src="${echapper(photos[0].fichier)}" alt="${nom(photos[0])}" loading="lazy">`
+      visuel = baliseImage(photos[0], 'vue active', nom(photos[0]), true)
         + (photos[0].legende ? `<span class="a-venir">${echapper(photos[0].legende)}</span>` : '');
     } else {
       // Plusieurs photos : une seule visible, des boutons pour passer de l'une à l'autre.
       const debut = Math.max(0, photos.findIndex((photo) => photo.legende === REGLAGES.vueParDefaut));
-      visuel = photos.map((photo, n) => `<img class="vue${n === debut ? ' active' : ''}" src="${echapper(photo.fichier)}" alt="${nom(photo)}" loading="lazy">`).join('')
+      visuel = photos.map((photo, n) => baliseImage(photo, `vue${n === debut ? ' active' : ''}`, nom(photo), true)).join('')
         + `<div class="vues">${photos.map((photo, n) => `<button type="button" data-vue="${n}" aria-pressed="${n === debut}">${echapper(photo.legende || `Photo ${n + 1}`)}</button>`).join('')}</div>`;
     }
     return `<article class="piece">
@@ -240,8 +261,12 @@ function poserGalerie() {
       <a class="piece-lien" href="#commande" data-piece="${echapper(piece.titre)}">Commander cette pièce</a>
     </article>`;
   }).join('');
+}
 
-  galerie.addEventListener('click', (e) => {
+// Les clics dans la galerie. Branché une seule fois : la galerie peut être
+// redessinée quand les articles arrivent de la base.
+function brancherGalerie() {
+  document.getElementById('galerie').addEventListener('click', (e) => {
     const lien = e.target.closest('[data-piece]');
     if (lien) document.getElementById('piece').value = lien.dataset.piece;
 
@@ -251,6 +276,82 @@ function poserGalerie() {
       cadre.querySelectorAll('.vue').forEach((img, n) => img.classList.toggle('active', n === Number(bouton.dataset.vue)));
       cadre.querySelectorAll('[data-vue]').forEach((b) => b.setAttribute('aria-pressed', String(b === bouton)));
     }
+  });
+}
+
+// ============================================================
+//  Articles gérés dans le back-office
+// ============================================================
+const adresseBase = (chemin) => `https://firestore.googleapis.com/v1/projects/${FIREBASE.projet}/databases/(default)/documents${chemin}${chemin.includes('?') ? '&' : '?'}key=${FIREBASE.cle}`;
+
+// Traduit une valeur au format de la base en valeur JavaScript.
+function lireValeur(v) {
+  if (!v) return undefined;
+  if ('stringValue' in v) return v.stringValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return v.doubleValue;
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(lireValeur);
+  if ('mapValue' in v) return lireChamps(v.mapValue.fields);
+  return undefined;
+}
+const lireChamps = (champs) => Object.fromEntries(Object.entries(champs || {}).map(([cle, v]) => [cle, lireValeur(v)]));
+
+// Remplace les pièces du site par les articles en ligne de la base.
+// En cas d'échec, ou si la base est vide, le site garde ses pièces de secours.
+async function chargerArticles() {
+  try {
+    const reponse = await fetch(adresseBase(':runQuery'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: 'articles' }],
+          where: { fieldFilter: { field: { fieldPath: 'visible' }, op: 'EQUAL', value: { booleanValue: true } } },
+        },
+      }),
+    });
+    if (!reponse.ok) return;
+    const articles = (await reponse.json())
+      .filter((ligne) => ligne.document)
+      .map((ligne) => lireChamps(ligne.document.fields))
+      .filter((a) => a.titre)
+      .sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+    if (!articles.length) return;
+
+    REGLAGES.pieces = articles.map((a) => ({
+      titre: a.titre,
+      note: a.note || '',
+      prix: a.prix || '',
+      prixLancement: a.prixLancement || '',
+      photos: (a.photos || []).filter((p) => p && (p.fichier || p.photoId)),
+    }));
+    const choisie = document.getElementById('piece').value;
+    poserAccueil();
+    poserGalerie();
+    poserListes();
+    document.getElementById('piece').value = choisie;
+    chargerPhotos();
+  } catch (erreur) {
+    // Base injoignable : on garde les pièces écrites dans ce fichier.
+  }
+}
+
+// Remplit les images dont la photo est rangée dans la base.
+const photosChargees = new Map();
+function chargerPhotos() {
+  document.querySelectorAll('img[data-photo]').forEach((img) => {
+    const id = img.dataset.photo;
+    if (!id) return;
+    if (!photosChargees.has(id)) {
+      photosChargees.set(id, fetch(adresseBase(`/photos/${encodeURIComponent(id)}`))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((doc) => (doc ? lireChamps(doc.fields).donnees : null))
+        .catch(() => null));
+    }
+    photosChargees.get(id).then((donnees) => {
+      if (donnees && /^data:image\/(jpeg|png|webp);base64,/.test(donnees)) img.src = donnees;
+    });
   });
 }
 
@@ -448,4 +549,6 @@ poserGalerie();
 poserListes();
 poserPied();
 poserPromo();
+brancherGalerie();
 brancherFormulaire();
+chargerArticles();

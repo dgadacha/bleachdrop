@@ -9,6 +9,42 @@
 const TYPES_IMAGE = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const TAILLE_MAX_BASE64 = 4000000; // environ 3 Mo d'image
 
+// La base Firebase du back-office. Valeurs publiques : ce sont les règles
+// (firestore.rules) qui n'autorisent ici que la création d'une commande.
+const BASE = 'https://firestore.googleapis.com/v1/projects/bleachdrop-nc/databases/(default)/documents';
+const CLE_BASE = 'AIzaSyAGG1HBm9Unhi_Y8msKJnOYb10JliiT4Lc';
+
+// Range la commande dans la base pour le back-office. Ne bloque jamais l'envoi
+// de l'e-mail : en cas d'échec, on le note dans le journal et on continue.
+async function enregistrer(d, modeleJoint) {
+  const texte = (valeur) => ({ stringValue: valeur });
+  const champs = {
+    nom: texte(d.nom),
+    email: texte(d.email),
+    piece: texte(d.piece),
+    taille: texte(d.taille),
+    modeleJoint: { booleanValue: modeleJoint },
+    statut: texte('nouvelle'),
+    source: texte('site'),
+    creeLe: { timestampValue: new Date().toISOString() },
+  };
+  if (d.prix) champs.prix = texte(d.prix);
+  if (d.message) champs.message = texte(d.message);
+  try {
+    const reponse = await fetch(`${BASE}/commandes?key=${CLE_BASE}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: champs }),
+      signal: AbortSignal.timeout(4000), // une base lente ne doit pas retenir l'e-mail
+    });
+    if (!reponse.ok) console.error('Base : commande non enregistrée :', reponse.status, await reponse.text());
+    return reponse.ok;
+  } catch (erreur) {
+    console.error('Base injoignable :', erreur);
+    return false;
+  }
+}
+
 // Une seule ligne, sans retour chariot, coupée à `max` caractères.
 const ligne = (valeur, max) => String(valeur == null ? '' : valeur).replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
 
@@ -56,6 +92,8 @@ module.exports = async (req, res) => {
     pieces.push({ filename: `modele.${extension}`, content: contenu });
   }
 
+  const enregistree = await enregistrer(d, pieces.length > 0);
+
   const texte = [
     `Nom : ${d.nom}`,
     `E-mail : ${d.email}`,
@@ -68,6 +106,9 @@ module.exports = async (req, res) => {
     '',
     '—',
     'Répondre à cet e-mail écrit directement au client.',
+    enregistree
+      ? 'La commande est aussi dans le back-office du site.'
+      : 'Attention : cette commande n\'a pas pu être rangée dans le back-office. Elle est à y ajouter à la main.',
   ].join('\n');
 
   let reponse;

@@ -510,6 +510,9 @@ function poserPromo() {
 // ============================================================
 //  Formulaire de commande
 // ============================================================
+// Pays proposés dans le formulaire (la même liste est contrôlée par la fonction d'envoi).
+const PAYS = ['Nouvelle-Calédonie'];
+
 // Numéro calédonien : 6 chiffres, avec ou sans +687 ou 00687 devant.
 // Renvoie '+687 75 12 34', '' si le champ est vide, ou null si le numéro n'est pas valable.
 function telephoneNC(texte) {
@@ -525,6 +528,7 @@ function verifier(d) {
   const erreurs = {};
   if (d.nom.length < 2) erreurs.nom = 'Indiquez votre prénom et votre nom.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) erreurs.email = 'Indiquez une adresse e-mail valide.';
+  if (!PAYS.includes(d.pays)) erreurs.pays = 'Choisissez votre pays.';
   if (d.telephone === null) erreurs.telephone = 'Indiquez un numéro calédonien à 6 chiffres, ou laissez vide.';
   if (!d.piece) erreurs.piece = 'Choisissez une pièce, ou « Motif sur mesure ».';
   if (!d.taille) erreurs.taille = 'Choisissez une taille.';
@@ -538,6 +542,7 @@ function ecrireMessage(d) {
   return [
     `Prénom et nom : ${d.nom}`,
     `E-mail : ${d.email}`,
+    `Pays : ${d.pays}`,
     ...(d.telephone ? [`Téléphone : ${d.telephone}`] : []),
     `Pièce : ${d.piece}`,
     `Taille : ${d.taille}`,
@@ -628,7 +633,7 @@ function brancherFormulaire() {
     const brut = Object.fromEntries(new FormData(formulaire));
     if (brut.site) return; // un robot a rempli le champ caché
     const d = {
-      nom: brut.nom.trim(), email: brut.email.trim(), telephone: telephoneNC(brut.telephone),
+      nom: brut.nom.trim(), email: brut.email.trim(), pays: brut.pays, telephone: telephoneNC(brut.telephone),
       piece: brut.piece, taille: brut.taille, message: brut.message.trim(),
       fichier: brut.modele && brut.modele.size ? brut.modele : null,
     };

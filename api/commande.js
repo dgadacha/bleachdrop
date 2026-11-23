@@ -12,6 +12,9 @@
 
 const { emailConfirmation } = require('../lib/email-confirmation');
 
+// Pays acceptés (le formulaire du site propose la même liste).
+const PAYS = ['Nouvelle-Calédonie'];
+
 const TYPES_IMAGE = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const TAILLE_MAX_BASE64 = 4000000; // environ 3 Mo d'image
 
@@ -34,6 +37,7 @@ async function enregistrer(d, modeleJoint) {
     source: texte('site'),
     creeLe: { timestampValue: new Date().toISOString() },
   };
+  champs.pays = texte(d.pays);
   if (d.telephone) champs.telephone = texte(d.telephone);
   if (d.prix) champs.prix = texte(d.prix);
   if (d.message) champs.message = texte(d.message);
@@ -75,6 +79,8 @@ module.exports = async (req, res) => {
   const d = {
     nom: ligne(corps.nom, 100),
     email: ligne(corps.email, 200),
+    // Une page ouverte avant l'ajout du champ n'envoie pas de pays : c'est le seul proposé.
+    pays: ligne(corps.pays, 60) || PAYS[0],
     // Numéro déjà mis en forme par le site ; tout autre format est ignoré.
     telephone: /^\+687 \d{2} \d{2} \d{2}$/.test(ligne(corps.telephone, 30)) ? ligne(corps.telephone, 30) : '',
     piece: ligne(corps.piece, 100),
@@ -83,7 +89,7 @@ module.exports = async (req, res) => {
     message: String(corps.message == null ? '' : corps.message).trim().slice(0, 4000),
   };
 
-  if (d.nom.length < 2 || !d.piece || !d.taille || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) {
+  if (d.nom.length < 2 || !d.piece || !d.taille || !PAYS.includes(d.pays) || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) {
     return res.status(400).json({ erreur: 'La demande est incomplète.' });
   }
 
@@ -106,6 +112,7 @@ module.exports = async (req, res) => {
   const texte = [
     `Prénom et nom : ${d.nom}`,
     `E-mail : ${d.email}`,
+    `Pays : ${d.pays}`,
     `Téléphone : ${d.telephone || 'non indiqué'}`,
     `Pièce : ${d.piece}`,
     `Taille : ${d.taille}`,

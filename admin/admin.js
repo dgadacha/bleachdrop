@@ -157,6 +157,7 @@ function carteCommande(c) {
     </div>
     <div class="carte-corps">
       ${contact || tel ? `<span>${[contact, tel].filter(Boolean).join(' · ')}</span>` : ''}
+      ${c.pays ? `<span class="discret">Pays : ${echapper(c.pays)}</span>` : ''}
       ${c.prix ? `<span class="discret">Prix affiché : ${echapper(c.prix)}</span>` : ''}
       ${c.message ? `<p class="texte">${echapper(c.message)}</p>` : ''}
     </div>

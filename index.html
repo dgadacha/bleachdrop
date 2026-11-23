@@ -92,7 +92,7 @@
       <p class="promo promo-commande" data-promo hidden></p>
 
       <form class="formulaire" id="formulaire" novalidate>
-        <div class="champ champ-large">
+        <div class="champ">
           <label for="nom">Prénom et nom</label>
           <input id="nom" name="nom" type="text" autocomplete="name" required>
           <p class="erreur" data-erreur="nom"></p>
@@ -101,6 +101,14 @@
           <label for="email">E-mail</label>
           <input id="email" name="email" type="email" autocomplete="email" required>
           <p class="erreur" data-erreur="email"></p>
+        </div>
+        <div class="champ">
+          <label for="pays">Pays</label>
+          <select id="pays" name="pays" required autocomplete="country-name">
+            <option value="Nouvelle-Calédonie" selected>Nouvelle-Calédonie</option>
+          </select>
+          <p class="discret-champ">Livraison et remise en main propre en Nouvelle-Calédonie pour l'instant.</p>
+          <p class="erreur" data-erreur="pays"></p>
         </div>
         <div class="champ">
           <label for="telephone">Téléphone (facultatif)</label>

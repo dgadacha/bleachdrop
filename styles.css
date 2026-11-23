@@ -4,7 +4,7 @@
   --trait: #262626;
   --gris: #8a8a8a;
   --blanc: #f4f4f1;
-  --gothique: "UnifrakturCook", "Old English Text MT", serif;
+  --gothique: "Manufacturing Consent", "Old English Text MT", serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --marge: clamp(16px, 5vw, 64px);
 }
@@ -102,12 +102,8 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .promo strong { font-weight: 500; }
-.promo[hidden], .champ[hidden] { display: none; }
+.promo[hidden] { display: none; }
 .promo-commande { margin: -16px 0 36px; }
-.champ #code { text-transform: uppercase; letter-spacing: .12em; }
-.champ #code::placeholder { text-transform: none; letter-spacing: 0; }
-.aide { font-size: 12px; color: var(--blanc); }
-.aide:empty { display: none; }
 
 .sur-titre {
   font-size: 11px;
@@ -374,6 +370,9 @@ h2 {
 .pied [data-marque] { font-family: var(--gothique); font-size: 20px; letter-spacing: 0; text-transform: none; color: var(--blanc); }
 .pied a { margin-right: 20px; text-underline-offset: 5px; }
 .pied a:last-child { margin-right: 0; }
+
+/* La police gothique n'existe qu'en une graisse : pas de faux gras */
+h1, h2, .etapes h3, .barre-nom, .pied [data-marque] { font-weight: 400; }
 
 /* ---------- Téléphone ---------- */
 

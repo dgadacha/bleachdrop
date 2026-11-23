@@ -21,19 +21,19 @@ const REGLAGES = {
 
   tailles: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
 
-  // Offre avec code promo. Mettre `code: ''` pour tout masquer.
+  // Réduction de lancement, appliquée d'office à tous les prix.
+  // Mettre `reduction: 0` pour l'arrêter tout de suite.
   //  reduction : en pourcentage.
-  //  fin       : l'offre s'arrête à cette date et heure (ici le 25 décembre
-  //              à minuit, heure de Nouméa). Passé ce moment, le bandeau
-  //              disparaît et le code est refusé, sans rien toucher.
+  //  fin       : la réduction s'arrête à cette date et heure (ici le
+  //              25 décembre à minuit, heure de Nouméa). Passé ce moment,
+  //              les prix normaux reviennent tout seuls.
   promo: {
-    code: 'BLEACH20',
     reduction: 20,
     fin: '2026-12-25T00:00:00+11:00',
     finTexte: 'avant le 25 décembre',
   },
 
-  // Tarif du motif sur mesure, affiché près du formulaire (vide = masqué).
+  // Tarif normal du motif sur mesure, affiché près du formulaire (vide = masqué).
   prixSurMesure: 'à partir de 6 500 XPF',
 
   // true = les photos passent en noir et blanc. false = vraies couleurs.
@@ -42,7 +42,8 @@ const REGLAGES = {
   // Les pièces de la galerie.
   //  photos : une ou plusieurs images, avec une légende (Face, Dos…).
   //           Liste vide = un visuel provisoire est dessiné à la place.
-  //  prix       : texte libre, par ex. '5 000 XPF'. Vide = « Prix sur demande ».
+  //  prix       : prix normal, par ex. '5 000 XPF'. Vide = « Prix sur demande ».
+  //               La réduction de lancement s'applique dessus toute seule.
   //  prixNormal : prix affiché barré à côté (laisser vide pour ne rien barrer).
   //  mention    : petit texte sous le prix, par ex. 'Prix de lancement'.
   pieces: [
@@ -54,8 +55,8 @@ const REGLAGES = {
         { fichier: 'images/araignee-dos.webp', legende: 'Dos' },
       ],
       prix: '5 000 XPF',
-      prixNormal: '7 500 XPF',
-      mention: 'Prix de lancement',
+      prixNormal: '',
+      mention: '',
     },
   ],
 };
@@ -152,6 +153,18 @@ function visuelProvisoire(index) {
     + `</svg><span class="a-venir">Photo à venir</span>`;
 }
 
+// Le prix d'une pièce : réduit d'office pendant l'offre, normal sinon.
+function baliseprix(piece) {
+  if (!piece.prix) return '<strong>Prix sur demande</strong>';
+  if (promoActive()) {
+    return `<s>${echapper(piece.prix)}</s> <strong>${echapper(prixReduit(piece.prix))}</strong>`
+      + `<small>−${REGLAGES.promo.reduction} % ${echapper(REGLAGES.promo.finTexte)}</small>`;
+  }
+  return (piece.prixNormal ? `<s>${echapper(piece.prixNormal)}</s> ` : '')
+    + `<strong>${echapper(piece.prix)}</strong>`
+    + (piece.mention ? `<small>${echapper(piece.mention)}</small>` : '');
+}
+
 function poserGalerie() {
   const galerie = document.getElementById('galerie');
   galerie.classList.toggle('photos-nb', REGLAGES.photosEnNoirEtBlanc);
@@ -167,7 +180,7 @@ function poserGalerie() {
       <div class="piece-visuels">${visuels}</div>
       <div class="piece-infos">
         <h3>${echapper(piece.titre)}</h3>
-        <span class="piece-prix">${piece.prix && piece.prixNormal ? `<s>${echapper(piece.prixNormal)}</s> ` : ''}<strong>${echapper(piece.prix || 'Prix sur demande')}</strong>${piece.prix && piece.mention ? `<small>${echapper(piece.mention)}</small>` : ''}</span>
+        <span class="piece-prix">${baliseprix(piece)}</span>
       </div>
       ${piece.note ? `<p class="piece-note">${echapper(piece.note)}</p>` : ''}
       <a class="piece-lien" href="#commande" data-piece="${echapper(piece.titre)}">Commander cette pièce</a>
@@ -183,8 +196,8 @@ function poserGalerie() {
 function poserListes() {
   const option = (valeur, texte = valeur) => `<option value="${echapper(valeur)}">${echapper(texte)}</option>`;
   document.getElementById('piece').innerHTML = option('', 'Choisir…')
-    + REGLAGES.pieces.map((p) => option(p.titre, p.prix ? `${p.titre} — ${p.prix}` : p.titre)).join('')
-    + option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${REGLAGES.prixSurMesure}` : SUR_MESURE);
+    + REGLAGES.pieces.map((p) => option(p.titre, p.prix ? `${p.titre} — ${prixActuel(p.prix)}` : p.titre)).join('')
+    + option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${prixActuel(REGLAGES.prixSurMesure)}` : SUR_MESURE);
   document.getElementById('taille').innerHTML = option('', 'Choisir…')
     + REGLAGES.tailles.map((t) => option(t)).join('');
 }
@@ -197,37 +210,32 @@ function poserPied() {
 }
 
 // ============================================================
-//  Offre avec code promo
+//  Réduction de lancement
 // ============================================================
-const promoActive = () => Boolean(REGLAGES.promo && REGLAGES.promo.code) && Date.now() < new Date(REGLAGES.promo.fin).getTime();
+const promoActive = () => Boolean(REGLAGES.promo && REGLAGES.promo.reduction > 0)
+  && Date.now() < new Date(REGLAGES.promo.fin).getTime();
 
-// Renvoie '' si le code est bon (ou vide), sinon le message d'erreur.
-function refusCode(code) {
-  if (!code) return '';
-  const promo = REGLAGES.promo;
-  if (!promo || !promo.code || code.toUpperCase() !== promo.code.toUpperCase()) return 'Ce code n\'existe pas.';
-  if (!promoActive()) return 'Cette offre est terminée.';
-  return '';
+// Applique la réduction au montant écrit dans un texte :
+// '5 000 XPF' donne '4 000 XPF', 'à partir de 6 500 XPF' donne 'à partir de 5 200 XPF'.
+function prixReduit(texte) {
+  return texte.replace(/\d[\d\s\u00a0\u202f]*\d|\d/, (nombre) => {
+    const montant = parseInt(nombre.replace(/\D/g, ''), 10);
+    const reduit = Math.round(montant * (100 - REGLAGES.promo.reduction) / 100);
+    return String(reduit).replace(/\B(?=(\d{3})+$)/g, ' ');
+  });
 }
 
-// Prix après réduction pour une pièce au prix chiffré, sinon ''.
-function prixReduit(titre) {
-  const piece = REGLAGES.pieces.find((p) => p.titre === titre);
-  const montant = piece && piece.prix ? parseInt(piece.prix.replace(/\D/g, ''), 10) : NaN;
-  if (!montant) return '';
-  const reduit = Math.round(montant * (100 - REGLAGES.promo.reduction) / 100);
-  return `${String(reduit).replace(/\B(?=(\d{3})+$)/g, ' ')} XPF`;
-}
+// Le prix en vigueur aujourd'hui.
+const prixActuel = (texte) => (promoActive() ? prixReduit(texte) : texte);
 
 function poserPromo() {
   const actif = promoActive();
   document.querySelectorAll('[data-promo]').forEach((el) => {
     el.hidden = !actif;
     if (actif) {
-      el.innerHTML = `Offre de lancement · <strong>−${REGLAGES.promo.reduction} %</strong> avec le code <strong>${echapper(REGLAGES.promo.code)}</strong>, pour toute commande ${echapper(REGLAGES.promo.finTexte)}`;
+      el.innerHTML = `Offre de lancement · <strong>−${REGLAGES.promo.reduction} %</strong> sur toute commande ${echapper(REGLAGES.promo.finTexte)}`;
     }
   });
-  document.getElementById('champ-code').hidden = !actif;
 }
 
 // ============================================================
@@ -239,7 +247,6 @@ function verifier(d) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) erreurs.email = 'Indiquez une adresse e-mail valide.';
   if (!d.piece) erreurs.piece = 'Choisissez une pièce, ou « Motif sur mesure ».';
   if (!d.taille) erreurs.taille = 'Choisissez une taille.';
-  if (refusCode(d.code)) erreurs.code = refusCode(d.code);
   if (d.piece === SUR_MESURE && d.message.length < 10) erreurs.message = 'Décrivez le motif que vous imaginez.';
   return erreurs;
 }
@@ -250,7 +257,7 @@ function ecrireMessage(d) {
     `E-mail : ${d.email}`,
     `Pièce : ${d.piece}`,
     `Taille : ${d.taille}`,
-    ...(d.code ? [`Code promo : ${d.code} (−${REGLAGES.promo.reduction} %)`] : []),
+    ...(d.prix ? [`Prix affiché : ${d.prix}`] : []),
     '',
     d.message || '(pas de message)',
   ].join('\n');
@@ -296,8 +303,15 @@ function brancherFormulaire() {
     if (brut.site) return; // un robot a rempli le champ caché
     const d = {
       nom: brut.nom.trim(), email: brut.email.trim(), piece: brut.piece, taille: brut.taille, message: brut.message.trim(),
-      code: (brut.code || '').trim().toUpperCase(),
     };
+
+    // Le prix vu par le client au moment de sa demande, pour que Maya le retrouve.
+    const tarif = d.piece === SUR_MESURE
+      ? REGLAGES.prixSurMesure
+      : (REGLAGES.pieces.find((p) => p.titre === d.piece) || {}).prix;
+    if (tarif) {
+      d.prix = prixActuel(tarif) + (promoActive() ? ` (−${REGLAGES.promo.reduction} % de lancement, prix normal ${tarif})` : '');
+    }
 
     const erreurs = verifier(d);
     afficherErreurs(erreurs);
@@ -325,19 +339,6 @@ function brancherFormulaire() {
       bouton.textContent = 'Envoyer la demande';
     }
   });
-
-  // Sous le champ du code : ce que la réduction donne, en direct.
-  const aide = document.getElementById('aide-code');
-  const majAide = () => {
-    const code = formulaire.code.value.trim();
-    if (!code || refusCode(code)) { aide.textContent = ''; return; }
-    const reduit = prixReduit(formulaire.piece.value);
-    aide.textContent = `Code appliqué : −${REGLAGES.promo.reduction} %${reduit ? `, soit ${reduit}` : ''}.`;
-  };
-  formulaire.addEventListener('input', majAide);
-  formulaire.addEventListener('change', majAide);
-  document.getElementById('galerie').addEventListener('click', () => setTimeout(majAide));
-  formulaire.addEventListener('reset', () => setTimeout(majAide));
 
   formulaire.addEventListener('input', (e) => {
     const champ = e.target.closest('.champ');

@@ -709,7 +709,7 @@ const observateur = 'IntersectionObserver' in window && !mouvementReduit
 function reveler() {
   if (!observateur) return;
   document.documentElement.classList.add('js');
-  document.querySelectorAll('.section-tete, .etapes li, .piece, .collection, .decompte, .formulaire').forEach((el) => {
+  document.querySelectorAll('.section-tete, .piece, .collection, .decompte, .formulaire').forEach((el) => {
     if (el.classList.contains('apparait')) return;
     el.classList.add('apparait');
     observateur.observe(el);

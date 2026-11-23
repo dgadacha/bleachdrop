@@ -54,7 +54,7 @@ h1, h2, h3, p { margin: 0; }
 
 /* Titres et noms : DM Sans gras, dégradé de javel découpé dans les lettres
    (la marge intérieure évite de couper les jambages). */
-h2, .etapes h3, .legal-titre, .drop-nom, .collection h3, .piece-infos h3 {
+h2, .legal-titre, .drop-nom, .collection h3, .piece-infos h3 {
   font-family: var(--titre);
   font-weight: 700;
   letter-spacing: -.025em;
@@ -211,14 +211,6 @@ h1 img { display: block; width: min(100%, 640px); height: auto; margin-left: -8p
   bottom: 72px;
   color: var(--gris);
 }
-
-/* ---------- Bandeau qui défile ---------- */
-
-.defilant { overflow: hidden; padding: 18px 0; border-block: 1px solid var(--trait); background: var(--noir); }
-.defilant-piste { display: flex; width: max-content; animation: defiler 38s linear infinite; }
-.defilant span { display: flex; align-items: center; gap: clamp(18px, 3vw, 36px); padding-right: clamp(18px, 3vw, 36px); font: 700 clamp(26px, 4.4vw, 52px)/1 var(--texte); letter-spacing: -.04em; white-space: nowrap; color: var(--creme); }
-.defilant span::after { content: ""; width: .32em; height: .32em; border-radius: 50%; background: var(--orange); }
-@keyframes defiler { to { transform: translateX(-50%); } }
 
 /* Apparition douce au défilement (posée par main.js ; rien ne bouge si le visiteur préfère moins d'animations) */
 .js .apparait { opacity: 0; transform: translateY(28px); transition: opacity .8s ease, transform .8s cubic-bezier(.2, .7, .2, 1); }
@@ -400,31 +392,6 @@ h2 {
 }
 .piece-lien:hover { color: var(--peche); }
 
-/* ---------- Démarche ---------- */
-
-.etapes {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: 32px clamp(24px, 5vw, 64px);
-  counter-reset: etape;
-}
-
-.etapes li { counter-increment: etape; border-top: 2px solid var(--orange); padding-top: 18px; }
-
-.etapes li::before {
-  content: "0" counter(etape);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: .2em;
-  color: var(--peche);
-}
-
-.etapes h3 { font-size: 26px; line-height: 1.2; margin: 4px 0 8px; }
-.etapes p { color: #c8c8c8; max-width: 36ch; }
-
 /* ---------- Formulaire ---------- */
 
 .formulaire {
@@ -557,9 +524,8 @@ h2 {
 
 @media (max-width: 640px) {
   .formulaire { grid-template-columns: 1fr; }
-  /* Deux liens au plus : « Démarche » (ou « Collections » s'il y en a) et « Commander ». */
-  .barre nav a[href="#pieces"] { display: none; }
-  .barre nav a[data-lien-collections]:not([hidden]) ~ a[href="#demarche"] { display: none; }
+  /* Deux liens au plus : « Pièces » (ou « Collections » s'il y en a) et « Commander ». */
+  .barre nav a[data-lien-collections]:not([hidden]) ~ a[href="#pieces"] { display: none; }
   .hero { padding-bottom: 56px; }
   .defile { display: none; }
   .actions .bouton { flex: 1 1 100%; }
@@ -569,6 +535,5 @@ h2 {
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   * { transition: none !important; }
-  .defilant-piste { animation: none; }
   .js .apparait { opacity: 1; transform: none; }
 }

@@ -8,12 +8,15 @@ const REGLAGES = {
   // Petite signature sous le nom (laisser vide pour masquer).
   signature: 'by Maya',
 
-  // Où arrivent les commandes. Remplir AU MOINS l'un des deux :
-  //  - adresseFormulaire : adresse d'un formulaire Formspree
-  //    (https://formspree.io/f/…). La demande part sans quitter le site.
-  //  - email : à défaut, le site ouvre la messagerie du visiteur
-  //    avec le message déjà écrit.
-  adresseFormulaire: '',
+  // Où partent les commandes.
+  //  - adresseFormulaire : la fonction d'envoi du site (dossier api/).
+  //    Elle envoie l'e-mail, avec l'image jointe, sans quitter le site.
+  //    L'adresse qui reçoit les commandes se règle dans Vercel
+  //    (variable COMMANDES_EMAIL), pas ici.
+  //  - email : solution de secours. Si l'envoi n'est pas disponible,
+  //    le site ouvre la messagerie du visiteur avec le message déjà écrit.
+  //    Laisser vide pour ne pas afficher d'adresse sur le site.
+  adresseFormulaire: '/api/commande',
   email: 'maya.moucho@gmail.com',
 
   // Liens du pied de page (laisser vide pour masquer).
@@ -247,7 +250,9 @@ function verifier(d) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) erreurs.email = 'Indiquez une adresse e-mail valide.';
   if (!d.piece) erreurs.piece = 'Choisissez une pièce, ou « Motif sur mesure ».';
   if (!d.taille) erreurs.taille = 'Choisissez une taille.';
-  if (d.piece === SUR_MESURE && d.message.length < 10) erreurs.message = 'Décrivez le motif que vous imaginez.';
+  if (d.fichier && !/^image\//.test(d.fichier.type)) erreurs.modele = 'Le modèle doit être une image (photo ou dessin).';
+  else if (d.fichier && d.fichier.size > 15 * 1024 * 1024) erreurs.modele = 'Cette image est trop lourde (15 Mo au maximum).';
+  if (d.piece === SUR_MESURE && d.message.length < 10 && !d.fichier) erreurs.message = 'Décrivez le motif que vous imaginez, ou joignez un modèle.';
   return erreurs;
 }
 
@@ -263,23 +268,60 @@ function ecrireMessage(d) {
   ].join('\n');
 }
 
+// Réduit l'image choisie (1600 px au plus, JPEG) et la rend en base64,
+// pour qu'elle parte vite même depuis un téléphone.
+async function preparerModele(fichier) {
+  const adresse = URL.createObjectURL(fichier);
+  try {
+    const image = await new Promise((ok, ko) => {
+      const img = new Image();
+      img.onload = () => ok(img);
+      img.onerror = () => ko(new Error('Cette image n\'a pas pu être lue. Essayez un fichier JPEG ou PNG.'));
+      img.src = adresse;
+    });
+    const echelle = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+    const toile = document.createElement('canvas');
+    toile.width = Math.max(1, Math.round(image.naturalWidth * echelle));
+    toile.height = Math.max(1, Math.round(image.naturalHeight * echelle));
+    const dessin = toile.getContext('2d');
+    dessin.fillStyle = '#fff'; // fond blanc sous les images transparentes
+    dessin.fillRect(0, 0, toile.width, toile.height);
+    dessin.drawImage(image, 0, 0, toile.width, toile.height);
+    return { type: 'image/jpeg', contenu: toile.toDataURL('image/jpeg', 0.85).split(',')[1] };
+  } finally {
+    URL.revokeObjectURL(adresse);
+  }
+}
+
+// Ouvre la messagerie du visiteur avec la demande déjà écrite.
+function ouvrirMessagerie(d, sujet) {
+  const rappel = d.fichier ? '\n\n(Pensez à joindre votre modèle à cet e-mail.)' : '';
+  window.location.href = `mailto:${REGLAGES.email}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(ecrireMessage(d) + rappel)}`;
+  return 'Votre messagerie s\'ouvre avec la demande déjà écrite.'
+    + (d.fichier ? ' Joignez-y votre modèle, puis envoyez.' : ' Il ne reste qu\'à l\'envoyer.');
+}
+
 async function envoyer(d) {
   const sujet = `Commande — ${d.piece} (${d.taille})`;
 
   if (REGLAGES.adresseFormulaire) {
+    const { fichier, ...champs } = d;
+    const modele = fichier ? await preparerModele(fichier) : undefined;
     const reponse = await fetch(REGLAGES.adresseFormulaire, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ ...d, _subject: sujet }),
+      body: JSON.stringify({ ...champs, modele }),
     });
-    if (!reponse.ok) throw new Error(`Envoi refusé (${reponse.status})`);
-    return 'Demande envoyée. Vous recevrez une réponse par e-mail, avec le prix et le délai.';
+    if (reponse.ok) return 'Demande envoyée. Vous recevrez une réponse par e-mail.';
+
+    // Envoi indisponible (pas encore réglé, ou site ouvert hors de Vercel) : secours.
+    if ([404, 405, 501, 503].includes(reponse.status) && REGLAGES.email) return ouvrirMessagerie(d, sujet);
+
+    const detail = await reponse.json().catch(() => ({}));
+    throw new Error(detail.erreur || `L'envoi a échoué (${reponse.status}). Réessayez dans un instant.`);
   }
 
-  if (REGLAGES.email) {
-    window.location.href = `mailto:${REGLAGES.email}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(ecrireMessage(d))}`;
-    return 'Votre messagerie s\'ouvre avec la demande déjà écrite. Il ne reste qu\'à l\'envoyer.';
-  }
+  if (REGLAGES.email) return ouvrirMessagerie(d, sujet);
 
   throw new Error('Le formulaire n\'est pas encore relié à une adresse. La demande n\'est pas partie.');
 }
@@ -303,6 +345,7 @@ function brancherFormulaire() {
     if (brut.site) return; // un robot a rempli le champ caché
     const d = {
       nom: brut.nom.trim(), email: brut.email.trim(), piece: brut.piece, taille: brut.taille, message: brut.message.trim(),
+      fichier: brut.modele && brut.modele.size ? brut.modele : null,
     };
 
     // Le prix vu par le client au moment de sa demande, pour que Maya le retrouve.
@@ -326,9 +369,10 @@ function brancherFormulaire() {
     bouton.disabled = true;
     bouton.textContent = 'Envoi…';
     try {
-      etat.textContent = await envoyer(d);
+      const message = await envoyer(d);
+      etat.textContent = message;
       etat.classList.add('ok');
-      if (REGLAGES.adresseFormulaire) formulaire.reset();
+      if (message.startsWith('Demande envoyée')) formulaire.reset();
     } catch (erreur) {
       etat.textContent = erreur instanceof TypeError
         ? 'Envoi impossible. Vérifiez votre connexion, puis réessayez.'

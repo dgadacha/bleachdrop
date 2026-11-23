@@ -72,6 +72,17 @@ const REGLAGES = {
       prixNormal: '',
       mention: '',
     },
+    {
+      titre: 'Magma',
+      note: 'Javel sur coton noir · effet délavé, face et dos',
+      photos: [
+        { fichier: 'images/magma-face.webp', legende: 'Face' },
+        { fichier: 'images/magma-dos.webp', legende: 'Dos' },
+      ],
+      prix: '5 000 XPF',
+      prixNormal: '',
+      mention: '',
+    },
   ],
 };
 

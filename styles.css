@@ -82,10 +82,7 @@ h1, h2, h3, p { margin: 0; }
 
 .hero {
   position: relative;
-  min-height: 100svh;
-  display: flex;
-  align-items: flex-end;
-  padding: 120px var(--marge) 72px;
+  padding: clamp(104px, 16vh, 168px) var(--marge) clamp(48px, 9vh, 88px);
   overflow: hidden;
 }
 
@@ -194,7 +191,7 @@ h2 {
 .galerie {
   max-width: 1100px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
   gap: 1px;
   background: var(--trait);
   border: 1px solid var(--trait);
@@ -202,9 +199,6 @@ h2 {
 
 .piece { background: var(--noir); display: flex; flex-direction: column; }
 
-/* Une pièce montrée sous plusieurs angles prend toute la largeur */
-.piece-large { grid-column: 1 / -1; }
-.piece-visuels { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1px; background: var(--trait); }
 
 .piece-visuel {
   position: relative;
@@ -222,6 +216,27 @@ h2 {
 }
 
 .piece-visuel img { object-fit: cover; }
+
+/* Pièce à plusieurs photos : une seule visible à la fois */
+.piece-visuel img.vue { opacity: 0; transition: opacity .35s ease, transform .6s ease; }
+.piece-visuel img.vue.active { opacity: 1; }
+
+.vues { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; }
+
+.vues button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--blanc);
+  border-radius: 0;
+  background: var(--noir);
+  color: var(--blanc);
+  font: 400 10px/1 var(--mono);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.vues button[aria-pressed="true"] { background: var(--blanc); color: var(--noir); }
 
 /* Option « photosEnNoirEtBlanc » des réglages */
 .photos-nb .piece-visuel img { filter: grayscale(1) contrast(1.15); }
@@ -391,7 +406,6 @@ h1, h2, .etapes h3, .barre-nom, .pied [data-marque] { font-weight: 400; }
 /* ---------- Téléphone ---------- */
 
 @media (max-width: 640px) {
-  .piece-visuels { grid-auto-flow: row; }
   .formulaire { grid-template-columns: 1fr; }
   .barre nav a:first-child { display: none; }
   .hero { padding-bottom: 56px; }

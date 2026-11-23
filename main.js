@@ -61,6 +61,16 @@ const REGLAGES = {
       prixNormal: '',
       mention: '',
     },
+    {
+      titre: 'Centipede',
+      note: 'Javel sur coton noir · dos',
+      photos: [
+        { fichier: 'images/centipede-dos.webp', legende: 'Dos' },
+      ],
+      prix: '5 000 XPF',
+      prixNormal: '',
+      mention: '',
+    },
   ],
 };
 
@@ -173,14 +183,20 @@ function poserGalerie() {
   galerie.classList.toggle('photos-nb', REGLAGES.photosEnNoirEtBlanc);
   galerie.innerHTML = REGLAGES.pieces.map((piece, i) => {
     const photos = piece.photos || [];
-    const visuels = photos.length
-      ? photos.map((photo) => `<div class="piece-visuel">`
-        + `<img src="${echapper(photo.fichier)}" alt="${echapper(`${piece.titre} — ${photo.legende || 'photo'}`)}" loading="lazy">`
-        + (photo.legende ? `<span class="a-venir">${echapper(photo.legende)}</span>` : '')
-        + `</div>`).join('')
-      : `<div class="piece-visuel">${visuelProvisoire(i)}</div>`;
-    return `<article class="piece${photos.length > 1 ? ' piece-large' : ''}">
-      <div class="piece-visuels">${visuels}</div>
+    const nom = (photo) => echapper(`${piece.titre} — ${photo.legende || 'photo'}`);
+    let visuel;
+    if (!photos.length) {
+      visuel = visuelProvisoire(i);
+    } else if (photos.length === 1) {
+      visuel = `<img class="vue active" src="${echapper(photos[0].fichier)}" alt="${nom(photos[0])}" loading="lazy">`
+        + (photos[0].legende ? `<span class="a-venir">${echapper(photos[0].legende)}</span>` : '');
+    } else {
+      // Plusieurs photos : une seule visible, des boutons pour passer de l'une à l'autre.
+      visuel = photos.map((photo, n) => `<img class="vue${n ? '' : ' active'}" src="${echapper(photo.fichier)}" alt="${nom(photo)}" loading="lazy">`).join('')
+        + `<div class="vues">${photos.map((photo, n) => `<button type="button" data-vue="${n}" aria-pressed="${n ? 'false' : 'true'}">${echapper(photo.legende || `Photo ${n + 1}`)}</button>`).join('')}</div>`;
+    }
+    return `<article class="piece">
+      <div class="piece-visuel">${visuel}</div>
       <div class="piece-infos">
         <h3>${echapper(piece.titre)}</h3>
         <span class="piece-prix">${baliseprix(piece)}</span>
@@ -193,6 +209,13 @@ function poserGalerie() {
   galerie.addEventListener('click', (e) => {
     const lien = e.target.closest('[data-piece]');
     if (lien) document.getElementById('piece').value = lien.dataset.piece;
+
+    const bouton = e.target.closest('[data-vue]');
+    if (bouton) {
+      const cadre = bouton.closest('.piece-visuel');
+      cadre.querySelectorAll('.vue').forEach((img, n) => img.classList.toggle('active', n === Number(bouton.dataset.vue)));
+      cadre.querySelectorAll('[data-vue]').forEach((b) => b.setAttribute('aria-pressed', String(b === bouton)));
+    }
   });
 }
 

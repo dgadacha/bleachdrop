@@ -11,7 +11,7 @@ service cloud.firestore {
     function estAdmin() {
       return request.auth != null && request.auth.uid in [
         'ppIfe4YiG4ajFoJ9xEJNJZwjTKm1',
-        'A_REMPLACER_UID_2'
+        'SIqXDGMEnVdC63b4ZWoFu7Qy03j2'
       ];
     }
 

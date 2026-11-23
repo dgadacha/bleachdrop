@@ -21,13 +21,18 @@ const REGLAGES = {
 
   tailles: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
 
+  // Tarif du motif sur mesure, affiché près du formulaire (vide = masqué).
+  prixSurMesure: 'à partir de 6 500 XPF',
+
   // true = les photos passent en noir et blanc. false = vraies couleurs.
   photosEnNoirEtBlanc: false,
 
   // Les pièces de la galerie.
   //  photos : une ou plusieurs images, avec une légende (Face, Dos…).
   //           Liste vide = un visuel provisoire est dessiné à la place.
-  //  prix   : texte libre, par ex. '4 500 F'. Vide = « Prix sur demande ».
+  //  prix       : texte libre, par ex. '5 000 XPF'. Vide = « Prix sur demande ».
+  //  prixNormal : prix affiché barré à côté (laisser vide pour ne rien barrer).
+  //  mention    : petit texte sous le prix, par ex. 'Prix de lancement'.
   pieces: [
     {
       titre: 'Spider-Man',
@@ -36,7 +41,9 @@ const REGLAGES = {
         { fichier: 'images/araignee-face.webp', legende: 'Face' },
         { fichier: 'images/araignee-dos.webp', legende: 'Dos' },
       ],
-      prix: '',
+      prix: '5 000 XPF',
+      prixNormal: '7 500 XPF',
+      mention: 'Prix de lancement',
     },
   ],
 };
@@ -148,7 +155,7 @@ function poserGalerie() {
       <div class="piece-visuels">${visuels}</div>
       <div class="piece-infos">
         <h3>${echapper(piece.titre)}</h3>
-        <span class="piece-prix">${echapper(piece.prix || 'Prix sur demande')}</span>
+        <span class="piece-prix">${piece.prix && piece.prixNormal ? `<s>${echapper(piece.prixNormal)}</s> ` : ''}<strong>${echapper(piece.prix || 'Prix sur demande')}</strong>${piece.prix && piece.mention ? `<small>${echapper(piece.mention)}</small>` : ''}</span>
       </div>
       ${piece.note ? `<p class="piece-note">${echapper(piece.note)}</p>` : ''}
       <a class="piece-lien" href="#commande" data-piece="${echapper(piece.titre)}">Commander cette pièce</a>
@@ -164,8 +171,8 @@ function poserGalerie() {
 function poserListes() {
   const option = (valeur, texte = valeur) => `<option value="${echapper(valeur)}">${echapper(texte)}</option>`;
   document.getElementById('piece').innerHTML = option('', 'Choisir…')
-    + REGLAGES.pieces.map((p) => option(p.titre)).join('')
-    + option(SUR_MESURE);
+    + REGLAGES.pieces.map((p) => option(p.titre, p.prix ? `${p.titre} — ${p.prix}` : p.titre)).join('')
+    + option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${REGLAGES.prixSurMesure}` : SUR_MESURE);
   document.getElementById('taille').innerHTML = option('', 'Choisir…')
     + REGLAGES.tailles.map((t) => option(t)).join('');
 }

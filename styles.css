@@ -89,33 +89,7 @@ h1, h2, h3, p { margin: 0; }
   overflow: hidden;
 }
 
-.hero-motif {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 30%;
-}
-
-.hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: linear-gradient(to top, #000 10%, rgba(0, 0, 0, .78) 45%, rgba(0, 0, 0, 0) 80%);
-}
-
 .hero-texte { position: relative; z-index: 2; max-width: 720px; }
-
-/* Voile noir derrière le texte : le motif s'efface là où on lit */
-.hero-texte::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: -48px -40vw -72px calc(var(--marge) * -1);
-  background: radial-gradient(ellipse at 30% 55%, rgba(0, 0, 0, .92) 35%, rgba(0, 0, 0, 0) 72%);
-}
 
 .sur-titre {
   font-size: 11px;
@@ -178,20 +152,6 @@ h1 {
   right: var(--marge);
   bottom: 72px;
   color: var(--gris);
-}
-
-/* Grand écran : le mille-pattes entier à droite, le texte à gauche */
-@media (min-width: 1000px) {
-  .hero-motif {
-    inset: 0 5vw 0 auto;
-    width: auto;
-    height: 100%;
-    object-fit: contain;
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 22%);
-    mask-image: linear-gradient(to right, transparent, #000 22%);
-  }
-  .hero::before { background: linear-gradient(to top, #000 0%, rgba(0, 0, 0, 0) 22%); }
-  .hero-texte::before { inset: -48px -6vw -72px calc(var(--marge) * -1); }
 }
 
 /* ---------- Sections ---------- */
@@ -276,7 +236,10 @@ h2 {
 }
 
 .piece-infos h3 { font: 400 13px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
-.piece-prix { font-size: 12px; color: var(--gris); white-space: nowrap; }
+.piece-prix { font-size: 12px; color: var(--gris); white-space: nowrap; text-align: right; }
+.piece-prix strong { font-weight: 500; font-size: 15px; color: var(--blanc); }
+.piece-prix s { margin-right: 6px; }
+.piece-prix small { display: block; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
 .piece-note { padding: 0 16px; font-size: 12px; color: var(--gris); }
 
 .piece-lien {

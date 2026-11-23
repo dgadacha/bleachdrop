@@ -6,7 +6,7 @@ const REGLAGES = {
   marque: 'bleach drop',
 
   // Petite signature sous le nom (laisser vide pour masquer).
-  signature: 'by Maya',
+  signature: '',
 
   // Où partent les commandes.
   //  - adresseFormulaire : la fonction d'envoi du site (dossier api/).
@@ -563,15 +563,22 @@ async function preparerModele(fichier) {
       img.onerror = () => ko(new Error('Cette image n\'a pas pu être lue. Essayez un fichier JPEG ou PNG.'));
       img.src = adresse;
     });
-    const echelle = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
-    const toile = document.createElement('canvas');
-    toile.width = Math.max(1, Math.round(image.naturalWidth * echelle));
-    toile.height = Math.max(1, Math.round(image.naturalHeight * echelle));
-    const dessin = toile.getContext('2d');
-    dessin.fillStyle = '#fff'; // fond blanc sous les images transparentes
-    dessin.fillRect(0, 0, toile.width, toile.height);
-    dessin.drawImage(image, 0, 0, toile.width, toile.height);
-    return { type: 'image/jpeg', contenu: toile.toDataURL('image/jpeg', 0.85).split(',')[1] };
+    // On réduit jusqu'à passer sous 900 000 caractères : l'image doit tenir
+    // dans un document de la base (1 Mo au plus) pour s'afficher dans le back-office.
+    let contenu = '';
+    for (const [cote, qualite] of [[1600, 0.85], [1400, 0.8], [1200, 0.75], [1000, 0.7], [800, 0.65]]) {
+      const echelle = Math.min(1, cote / Math.max(image.naturalWidth, image.naturalHeight));
+      const toile = document.createElement('canvas');
+      toile.width = Math.max(1, Math.round(image.naturalWidth * echelle));
+      toile.height = Math.max(1, Math.round(image.naturalHeight * echelle));
+      const dessin = toile.getContext('2d');
+      dessin.fillStyle = '#fff'; // fond blanc sous les images transparentes
+      dessin.fillRect(0, 0, toile.width, toile.height);
+      dessin.drawImage(image, 0, 0, toile.width, toile.height);
+      contenu = toile.toDataURL('image/jpeg', qualite).split(',')[1];
+      if (contenu.length < 900000) break;
+    }
+    return { type: 'image/jpeg', contenu };
   } finally {
     URL.revokeObjectURL(adresse);
   }
@@ -638,7 +645,7 @@ function brancherFormulaire() {
       fichier: brut.modele && brut.modele.size ? brut.modele : null,
     };
 
-    // Le prix vu par le client au moment de sa demande, pour que Maya le retrouve.
+    // Le prix vu par le client au moment de sa demande, pour que l'équipe le retrouve.
     const fiche = d.piece === SUR_MESURE ? null : REGLAGES.pieces.find((p) => p.titre === d.piece);
     if (d.piece === SUR_MESURE || fiche) {
       const p = prixPour(fiche);

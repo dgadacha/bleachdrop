@@ -137,6 +137,26 @@ function dessinerCommandes() {
   });
   $('liste-commandes').innerHTML = visibles.length ? visibles.map(carteCommande).join('')
     : '<p class="vide">Aucune commande à afficher ici.</p>';
+  remplirModeles();
+}
+
+// Images jointes par les clients, chargées une seule fois chacune.
+const modeles = new Map(); // modeleId -> promesse de l'adresse data:image/…
+function sourceModele(id) {
+  if (!modeles.has(id)) {
+    modeles.set(id, getDoc(doc(db, 'modeles', id))
+      .then((d) => (d.exists() ? `data:${d.data().type};base64,${d.data().contenu}` : ''))
+      .catch(() => ''));
+  }
+  return modeles.get(id);
+}
+function remplirModeles() {
+  $('liste-commandes').querySelectorAll('img[data-modele-img]').forEach((img) => {
+    sourceModele(img.dataset.modeleImg).then((source) => {
+      if (source) img.src = source;
+      else img.closest('.vignette').outerHTML = '<span class="etiquette">Modèle joint : voir l\'e-mail</span>';
+    });
+  });
 }
 
 function carteCommande(c) {
@@ -152,7 +172,7 @@ function carteCommande(c) {
       <span>${echapper(c.piece)} · ${echapper(c.taille)}</span>
       ${c.statut === 'nouvelle' ? '<span class="etiquette forte">Nouvelle</span>' : ''}
       ${c.source === 'manuel' ? '<span class="etiquette">À la main</span>' : ''}
-      ${c.modeleJoint ? '<span class="etiquette">Modèle joint : voir l\'e-mail</span>' : ''}
+      ${c.modeleJoint && !c.modeleId ? '<span class="etiquette">Modèle joint : voir l\'e-mail</span>' : ''}
       <span class="date">${echapper(date)}</span>
     </div>
     <div class="carte-corps">
@@ -160,6 +180,7 @@ function carteCommande(c) {
       ${c.pays ? `<span class="discret">Pays : ${echapper(c.pays)}</span>` : ''}
       ${c.prix ? `<span class="discret">Prix affiché : ${echapper(c.prix)}</span>` : ''}
       ${c.message ? `<p class="texte">${echapper(c.message)}</p>` : ''}
+      ${c.modeleId ? `<button type="button" class="vignette" data-modele="${echapper(c.modeleId)}" aria-label="Agrandir le modèle joint"><img data-modele-img="${echapper(c.modeleId)}" alt="Modèle joint par le client"><span>Modèle joint · agrandir</span></button>` : ''}
     </div>
     <div class="suivi">
       <label>Statut <select data-champ="statut">${choix(Object.entries(STATUTS), c.statut)}</select></label>
@@ -196,11 +217,29 @@ $('liste-commandes').addEventListener('change', async (e) => {
 $('liste-commandes').addEventListener('focusout', () => { if (dessinEnAttente) setTimeout(() => { if (dessinEnAttente && !$('liste-commandes').contains(document.activeElement)) dessinerCommandes(); }, 50); });
 
 $('liste-commandes').addEventListener('click', async (e) => {
+  // Vignette du modèle : on l'ouvre en grand.
+  const vignette = e.target.closest('[data-modele]');
+  if (vignette) {
+    const source = await sourceModele(vignette.dataset.modele);
+    if (!source) return;
+    $('modele-plein').src = source;
+    $('telecharger-modele').href = source;
+    $('telecharger-modele').download = `modele-${vignette.dataset.modele}.${source.slice(11, source.indexOf(';')) || 'jpg'}`;
+    $('fiche-modele').showModal();
+    return;
+  }
+
   if (!e.target.matches('[data-supprimer]')) return;
   const carte = e.target.closest('[data-id]');
   const c = commandes.find((x) => x.id === carte.dataset.id);
   if (!confirm(`Supprimer définitivement la commande de ${c ? c.nom : 'ce client'} ?\nPour la garder dans les comptes, passe-la plutôt en « Annulée ».`)) return;
-  await deleteDoc(doc(db, 'commandes', carte.dataset.id)).catch(() => alert('Suppression impossible.'));
+  try {
+    await deleteDoc(doc(db, 'commandes', carte.dataset.id));
+    // L'image jointe part avec la commande.
+    if (c && c.modeleId) await deleteDoc(doc(db, 'modeles', c.modeleId)).catch(() => {});
+  } catch (erreur) {
+    alert('Suppression impossible.');
+  }
 });
 
 $('ajouter-commande').addEventListener('click', () => {

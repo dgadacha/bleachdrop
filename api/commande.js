@@ -25,7 +25,36 @@ const CLE_BASE = 'AIzaSyAGG1HBm9Unhi_Y8msKJnOYb10JliiT4Lc';
 
 // Range la commande dans la base pour le back-office. Ne bloque jamais l'envoi
 // de l'e-mail : en cas d'échec, on le note dans le journal et on continue.
-async function enregistrer(d, modeleJoint) {
+// Range l'image jointe dans la collection privée « modeles » et renvoie son
+// identifiant, ou null. Une image trop lourde pour un document (1 Mo) n'est pas
+// rangée : elle reste dans l'e-mail envoyé à l'équipe.
+async function rangerModele(modele) {
+  if (!modele || modele.contenu.length >= 1000000) return null;
+  try {
+    const reponse = await fetch(`${BASE}/modeles?key=${CLE_BASE}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        type: { stringValue: modele.type },
+        contenu: { stringValue: modele.contenu },
+        creeLe: { timestampValue: new Date().toISOString() },
+      } }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!reponse.ok) {
+      console.error('Base : modèle non rangé :', reponse.status, await reponse.text());
+      return null;
+    }
+    return (await reponse.json()).name.split('/').pop();
+  } catch (erreur) {
+    console.error('Base injoignable (modèle) :', erreur);
+    return null;
+  }
+}
+
+async function enregistrer(d, modele) {
+  const modeleJoint = Boolean(modele);
+  const modeleId = await rangerModele(modele);
   const texte = (valeur) => ({ stringValue: valeur });
   const champs = {
     nom: texte(d.nom),
@@ -41,6 +70,7 @@ async function enregistrer(d, modeleJoint) {
   if (d.telephone) champs.telephone = texte(d.telephone);
   if (d.prix) champs.prix = texte(d.prix);
   if (d.message) champs.message = texte(d.message);
+  if (modeleId) champs.modeleId = texte(modeleId);
   try {
     const reponse = await fetch(`${BASE}/commandes?key=${CLE_BASE}`, {
       method: 'POST',
@@ -94,6 +124,7 @@ module.exports = async (req, res) => {
   }
 
   const pieces = [];
+  let modele = null; // l'image jointe, rangée aussi dans la base pour le back-office
   const jointe = corps.modele;
   if (jointe && typeof jointe === 'object') {
     const extension = TYPES_IMAGE[jointe.type];
@@ -105,9 +136,10 @@ module.exports = async (req, res) => {
       return res.status(413).json({ erreur: 'L\'image est trop lourde (3 Mo au maximum).' });
     }
     pieces.push({ filename: `modele.${extension}`, content: contenu });
+    modele = { type: jointe.type, contenu };
   }
 
-  const enregistree = await enregistrer(d, pieces.length > 0);
+  const enregistree = await enregistrer(d, modele);
 
   const texte = [
     `Prénom et nom : ${d.nom}`,
@@ -157,8 +189,8 @@ module.exports = async (req, res) => {
 };
 
 // Envoie au client l'e-mail de confirmation. N'empêche jamais la commande :
-// en cas d'échec, Maya a déjà reçu la demande, on le note simplement.
-async function confirmerAuClient(cle, adresseMaya, d, modeleJoint) {
+// en cas d'échec, l'équipe a déjà reçu la demande, on le note simplement.
+async function confirmerAuClient(cle, adresseEquipe, d, modeleJoint) {
   const expediteur = process.env.COMMANDES_FROM;
   if (!expediteur) return false; // pas de domaine vérifié : Resend refuserait
   const mail = emailConfirmation({ ...d, modeleJoint });
@@ -169,7 +201,7 @@ async function confirmerAuClient(cle, adresseMaya, d, modeleJoint) {
       body: JSON.stringify({
         from: expediteur,
         to: [d.email],
-        reply_to: adresseMaya, // le client répond directement à Maya
+        reply_to: adresseEquipe, // le client répond directement à l'équipe
         subject: mail.sujet,
         html: mail.html,
         text: mail.texte,

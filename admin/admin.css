@@ -142,6 +142,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
 .carte-pied { display: flex; justify-content: space-between; align-items: center; padding: 0 16px 8px; }
 .enregistre { font-size: 11px; color: var(--gris); }
 
+/* ---------- Modèle joint ---------- */
+.vignette { display: inline-flex; align-items: center; gap: 12px; justify-self: start; margin-top: 4px; padding: 6px 12px 6px 6px; border: 1px solid #555; background: none; color: var(--blanc); font: 400 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; cursor: zoom-in; }
+.vignette img { width: 64px; height: 64px; object-fit: cover; background: #151515; }
+.vignette:hover, .vignette:focus-visible { border-color: var(--blanc); }
+#fiche-modele { width: min(900px, calc(100vw - 24px)); }
+.modele-plein { display: grid; gap: 14px; padding: 14px; }
+.modele-plein img { display: block; width: 100%; max-height: calc(100dvh - 140px); object-fit: contain; background: #111; }
+
 /* ---------- Articles ---------- */
 .article { display: grid; grid-template-columns: 72px 1fr; gap: 14px; padding: 12px; align-items: center; }
 .article img, .article .sans-photo { width: 72px; height: 96px; object-fit: cover; background: #151515; border: 1px solid var(--trait); }

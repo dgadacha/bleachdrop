@@ -111,12 +111,12 @@ function poserMarque() {
   document.title = `${REGLAGES.marque} — tee-shirts à la javel`;
 }
 
-// Visuel provisoire d'une pièce sans photo : un tee-shirt noir taché de javel.
+// Visuel provisoire d'une pièce sans photo : un tee-shirt noir taché de javel (en gris).
 function visuelProvisoire(index) {
   const id = `tache-${index}`;
   const x = 170 + (index % 3) * 30;
   return `<svg viewBox="0 0 400 500" role="img" aria-label="Visuel provisoire">`
-    + `<defs><radialGradient id="${id}" cx="45%" cy="35%" r="70%"><stop offset="0" stop-color="#fff1de"/><stop offset=".45" stop-color="#e0844f"/><stop offset="1" stop-color="#d05106"/></radialGradient></defs>`
+    + `<defs><radialGradient id="${id}" cx="45%" cy="35%" r="70%"><stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#bdbdbd"/><stop offset="1" stop-color="#8a8a8a"/></radialGradient></defs>`
     + `<path d="M140 60 Q200 104 260 60 L340 95 L385 190 L325 220 L310 185 L310 462 L90 462 L90 185 L75 220 L15 190 L60 95 Z" fill="#000" stroke="#3a3a3a" stroke-width="1.5"/>`
     + `<g clip-path="url(#forme-tee)" fill="url(#${id})" opacity=".9">`
     + `<circle cx="${x}" cy="240" r="52"/><circle cx="${x + 58}" cy="196" r="10"/><circle cx="${x - 62}" cy="214" r="7"/>`

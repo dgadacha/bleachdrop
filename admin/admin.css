@@ -241,7 +241,7 @@ input[type="range"]:disabled { opacity: .35; }
 #infos-pochoir .alerte { margin: 0; }
 .apercu-pochoir .actions { flex-wrap: wrap; }
 .marge-bas { margin-bottom: 14px; }
-.pochoir img { object-fit: contain; background: #fff; }
+.pochoir img { object-fit: contain; background: #fff; cursor: pointer; }
 
 @media (max-width: 760px) {
   .atelier { grid-template-columns: 1fr; }

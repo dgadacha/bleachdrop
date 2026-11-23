@@ -54,6 +54,10 @@ service cloud.firestore {
     match /pochoirsImages/{id} {
       allow read, write: if estAdmin();
     }
+    // De quoi rouvrir un pochoir dans l'éditeur : image d'origine, réglages, gomme.
+    match /pochoirsSources/{id} {
+      allow read, write: if estAdmin();
+    }
 
     match /reglages/{id} {
       allow get: if true;

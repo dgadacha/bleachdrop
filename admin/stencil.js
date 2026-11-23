@@ -130,12 +130,20 @@ export function brancherStencil(db) {
 
   let source = null; // { rgba, largeur, hauteur }
   let effacer = []; // points gommés, en pixels de l'image de travail
+  let pochoirOuvert = null; // identifiant du pochoir rouvert depuis la bibliothèque, sinon null
   let resultat = null;
   let vue = 'apercu';
   let minuterie = null;
 
   // ---------- Chargement d'une image (fichier ou Blob)
-  async function chargerImage(blob, nom) {
+  // Les boutons d'enregistrement suivent l'état : nouveau pochoir, ou pochoir rouvert.
+  function majBoutonsEnregistrer() {
+    $('enregistrer-pochoir').textContent = pochoirOuvert ? 'Enregistrer les modifications' : 'Enregistrer';
+    $('enregistrer-copie').hidden = !pochoirOuvert;
+  }
+
+  // reprise : { id, nom, reglages, effacer } pour rouvrir un pochoir de la bibliothèque
+  async function chargerImage(blob, nom, reprise = null) {
     let bitmap;
     try {
       bitmap = await createImageBitmap(blob);
@@ -153,20 +161,56 @@ export function brancherStencil(db) {
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(bitmap, 0, 0, largeur, hauteur);
     bitmap.close();
-    source = { rgba: ctx.getImageData(0, 0, largeur, hauteur).data, largeur, hauteur };
-    effacer = [];
+    source = { rgba: ctx.getImageData(0, 0, largeur, hauteur).data, largeur, hauteur, toile: travail };
 
-    // On découpe la partie minoritaire : un pochoir est surtout de la matière.
-    const essai = masqueDeDecoupe(source.rgba, largeur, hauteur, { flou: 1, nettoyage: 0 });
-    let surface = 0;
-    for (const v of essai.trous) surface += v;
-    f.decoupe.value = surface > essai.trous.length / 2 ? 'claires' : 'foncees';
-    f.seuilAuto.checked = true;
-    f.egaliser.checked = false;
-    f.nom.value = (nom || '').replace(/\.[a-z0-9]+$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, 60);
+    if (reprise) {
+      // On remet les réglages et les coups de gomme tels qu'ils étaient à l'enregistrement.
+      const r = reprise.reglages || {};
+      const poser = (nomChamp, valeur) => { if (valeur !== undefined && valeur !== null) f[nomChamp].value = valeur; };
+      poser('largeurCm', r.largeurCm); poser('seuil', r.seuil); poser('lissage', r.lissage);
+      poser('nettoyageMm', r.nettoyageMm); poser('pontMm', r.pontMm); poser('margeCm', r.margeCm);
+      f.decoupe.value = r.decoupe === 'claires' ? 'claires' : 'foncees';
+      f.seuilAuto.checked = r.seuilAuto !== false;
+      f.egaliser.checked = Boolean(r.egaliser);
+      f.ponts.checked = r.ponts !== false;
+      effacer = (reprise.effacer || []).map((pt) => [pt.x, pt.y]);
+      pochoirOuvert = reprise.id;
+      f.nom.value = reprise.nom || '';
+    } else {
+      effacer = [];
+      pochoirOuvert = null;
+      // On découpe la partie minoritaire : un pochoir est surtout de la matière.
+      const essai = masqueDeDecoupe(source.rgba, largeur, hauteur, { flou: 1, nettoyage: 0 });
+      let surface = 0;
+      for (const v of essai.trous) surface += v;
+      f.decoupe.value = surface > essai.trous.length / 2 ? 'claires' : 'foncees';
+      f.seuilAuto.checked = true;
+      f.egaliser.checked = false;
+      f.nom.value = (nom || '').replace(/\.[a-z0-9]+$/i, '').replace(/[-_]+/g, ' ').trim().slice(0, 60);
+    }
+    majBoutonsEnregistrer();
     $('atelier').hidden = false;
     message('');
     calculer();
+    // après le calcul, qui vide la zone de message
+    if (reprise) message(`Tu modifies « ${reprise.nom} ». « Enregistrer les modifications » remplace la version de la bibliothèque.`);
+  }
+
+  // L'image de travail, gardée pour pouvoir rouvrir le pochoir (JPEG sur fond blanc :
+  // le transparent compte comme du blanc dans le moteur).
+  function sourceEnregistrable() {
+    const t = document.createElement('canvas');
+    t.width = source.largeur;
+    t.height = source.hauteur;
+    const ctx = t.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, t.width, t.height);
+    ctx.drawImage(source.toile, 0, 0);
+    for (const qualite of [0.9, 0.8, 0.7, 0.6, 0.5]) {
+      const url = t.toDataURL('image/jpeg', qualite);
+      if (url.length < TAILLE_MAX) return url;
+    }
+    return null;
   }
 
   $('image-pochoir').addEventListener('change', (e) => {
@@ -362,36 +406,58 @@ export function brancherStencil(db) {
     if (resultat) imprimer({ nom: f.nom.value || 'Pochoir', image: imageImprimable(), largeurCm: resultat.largeurCm, hauteurCm: resultat.hauteurCm });
   });
 
-  $('enregistrer-pochoir').addEventListener('click', async () => {
+  async function enregistrer(commeNouveau) {
     if (!resultat) return;
     const nom = f.nom.value.trim();
     if (!nom) { message('Donne un nom au pochoir.'); f.nom.focus(); return; }
     const image = imageImprimable(TAILLE_MAX);
     if (!image) { message('Ce pochoir est trop détaillé pour être enregistré. Augmente « Supprimer les taches » ou réduis la largeur.'); return; }
-    const bouton = $('enregistrer-pochoir');
-    bouton.disabled = true;
+    const imageSource = sourceEnregistrable();
+    const boutons = [$('enregistrer-pochoir'), $('enregistrer-copie')];
+    boutons.forEach((b) => { b.disabled = true; });
     message('Enregistrement…');
     try {
-      const ref = doc(collection(db, 'pochoirs'));
+      const nouveau = commeNouveau || !pochoirOuvert;
+      const id = nouveau ? doc(collection(db, 'pochoirs')).id : pochoirOuvert;
+      const r = lireReglages();
       const lot = writeBatch(db);
-      lot.set(ref, {
+      lot.set(doc(db, 'pochoirs', id), {
         nom: nom.slice(0, 60),
         miniature: miniature(),
         largeurCm: Math.round(resultat.largeurCm * 10) / 10,
         hauteurCm: Math.round(resultat.hauteurCm * 10) / 10,
         ponts: resultat.pontsAjoutes,
-        creeLe: serverTimestamp(),
-      });
-      lot.set(doc(db, 'pochoirsImages', ref.id), { image });
+        ...(nouveau ? { creeLe: serverTimestamp() } : { modifieLe: serverTimestamp() }),
+      }, { merge: true });
+      lot.set(doc(db, 'pochoirsImages', id), { image });
+      if (imageSource) {
+        // De quoi rouvrir le pochoir dans l'éditeur : l'image d'origine, les réglages, la gomme.
+        lot.set(doc(db, 'pochoirsSources', id), {
+          image: imageSource,
+          largeur: source.largeur,
+          hauteur: source.hauteur,
+          reglages: {
+            largeurCm: r.largeurCm, decoupe: r.inverser ? 'claires' : 'foncees', seuilAuto: r.seuilAuto, seuil: r.seuil,
+            egaliser: r.egaliser, lissage: r.lissage, nettoyageMm: r.nettoyageMm, ponts: r.ponts, pontMm: r.pontMm, margeCm: r.margeCm,
+          },
+          effacer: effacer.map(([x, y]) => ({ x, y })), // la base n'accepte pas les listes de listes
+        });
+      }
       await lot.commit();
-      images.set(ref.id, Promise.resolve(image));
-      message(`« ${nom} » est dans la bibliothèque.`);
+      images.set(id, Promise.resolve(image));
+      pochoirOuvert = id;
+      majBoutonsEnregistrer();
+      message(nouveau
+        ? `« ${nom} » est dans la bibliothèque.${imageSource ? '' : ' (Image d\'origine trop lourde : il ne pourra pas être rouvert dans l\'éditeur.)'}`
+        : `Les modifications de « ${nom} » sont enregistrées.`);
     } catch (erreur) {
       message('Le pochoir n\'a pas pu être enregistré.');
     } finally {
-      bouton.disabled = false;
+      boutons.forEach((b) => { b.disabled = false; });
     }
-  });
+  }
+  $('enregistrer-pochoir').addEventListener('click', () => enregistrer(false));
+  $('enregistrer-copie').addEventListener('click', () => enregistrer(true));
 
   // ---------- Bibliothèque
   let pochoirs = [];
@@ -411,13 +477,14 @@ export function brancherStencil(db) {
       const plan = planImpression(p.largeurCm * 10, p.hauteurCm * 10);
       const date = p.creeLe && p.creeLe.toDate ? p.creeLe.toDate().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
       return `<article class="carte article pochoir" data-pochoir="${echapper(p.id)}">
-        <img src="${echapper(p.miniature)}" alt="">
+        <img src="${echapper(p.miniature)}" alt="Modifier ${echapper(p.nom)}" data-action-pochoir="modifier" title="Rouvrir dans l'éditeur">
         <div class="article-infos">
           <strong>${echapper(p.nom)}</strong>
           <span class="discret">Feuille ${cm(p.largeurCm)} × ${cm(p.hauteurCm)} cm · ${plan.pages} page${plan.pages > 1 ? 's' : ''} A4</span>
           <span class="discret">${echapper(date)}</span>
         </div>
         <div class="article-actions">
+          <button class="lien" data-action-pochoir="modifier">Modifier</button>
           <button class="lien" data-action-pochoir="imprimer">Imprimer</button>
           <button class="lien" data-action-pochoir="telecharger">Télécharger</button>
           <button class="lien danger pousse" data-action-pochoir="supprimer">Supprimer</button>
@@ -436,8 +503,26 @@ export function brancherStencil(db) {
       const lot = writeBatch(db);
       lot.delete(doc(db, 'pochoirs', p.id));
       lot.delete(doc(db, 'pochoirsImages', p.id));
+      lot.delete(doc(db, 'pochoirsSources', p.id));
       await lot.commit().catch(() => alert('Suppression impossible.'));
       images.delete(p.id);
+      if (pochoirOuvert === p.id) { pochoirOuvert = null; majBoutonsEnregistrer(); }
+      return;
+    }
+    if (action === 'modifier') {
+      try {
+        const d = await getDoc(doc(db, 'pochoirsSources', p.id));
+        if (!d.exists()) {
+          alert(`« ${p.nom} » a été enregistré avant que l'éditeur garde l'image d'origine : il ne peut pas être rouvert.\nRecharge l'image d'origine avec « Choisir une image », règle-la, puis enregistre : la nouvelle version pourra être rouverte.`);
+          return;
+        }
+        const s = d.data();
+        const blob = await (await fetch(s.image)).blob();
+        await chargerImage(blob, p.nom, { id: p.id, nom: p.nom, reglages: s.reglages, effacer: s.effacer });
+        $('titre-convertisseur').scrollIntoView({ block: 'start' });
+      } catch (erreur) {
+        alert('Ce pochoir n\'a pas pu être rouvert.');
+      }
       return;
     }
     const texte = e.target.textContent;

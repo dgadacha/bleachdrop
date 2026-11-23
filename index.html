@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bleach drop — tee-shirts à la javel</title>
+  <meta name="description" content="Tee-shirts décolorés à la javel, dessinés et faits à la main. Pièces uniques, sur commande.">
+  <meta name="theme-color" content="#000000">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=UnifrakturCook:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Filtre partagé : bords irréguliers, comme une trace de javel -->
+  <svg class="defs" aria-hidden="true" focusable="false">
+    <defs>
+      <filter id="javel" x="-5%" y="-5%" width="110%" height="110%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="4" result="bruit"/>
+        <feDisplacementMap in="SourceGraphic" in2="bruit" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+      <clipPath id="forme-tee">
+        <path d="M140 60 Q200 104 260 60 L340 95 L385 190 L325 220 L310 185 L310 462 L90 462 L90 185 L75 220 L15 190 L60 95 Z"/>
+      </clipPath>
+    </defs>
+  </svg>
+
+  <header class="barre">
+    <a class="barre-nom" href="#haut" data-marque></a>
+    <nav aria-label="Navigation principale">
+      <a href="#pieces">Pièces</a>
+      <a href="#demarche">Démarche</a>
+      <a href="#commande">Commander</a>
+    </nav>
+  </header>
+
+  <main id="haut">
+
+    <section class="hero">
+      <svg class="hero-motif" id="motif-hero" viewBox="0 0 900 1400" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+      <div class="hero-texte">
+        <p class="sur-titre">Tee-shirts décolorés à la javel</p>
+        <h1 data-marque></h1>
+        <p class="signature" data-signature></p>
+        <p class="accroche">Dessinés à la main, un par un.<br>Aucune pièce n'est identique à une autre.</p>
+        <div class="actions">
+          <a class="bouton" href="#pieces">Voir les pièces</a>
+          <a class="bouton bouton-plein" href="#commande">Commander</a>
+        </div>
+      </div>
+      <span class="defile" aria-hidden="true">↓</span>
+    </section>
+
+    <section class="section" id="pieces">
+      <header class="section-tete">
+        <span class="numero">01</span>
+        <h2>Pièces</h2>
+        <p>Commandez cette pièce, ou demandez un motif rien que pour vous.</p>
+      </header>
+      <div class="galerie" id="galerie"></div>
+    </section>
+
+    <section class="section" id="demarche">
+      <header class="section-tete">
+        <span class="numero">02</span>
+        <h2>Démarche</h2>
+      </header>
+      <ol class="etapes">
+        <li>
+          <h3>Le dessin</h3>
+          <p>Chaque motif est tracé à la main, directement sur le tissu noir.</p>
+        </li>
+        <li>
+          <h3>La javel</h3>
+          <p>La javel retire la couleur du coton. Le motif ne s'imprime pas : il est dans la fibre.</p>
+        </li>
+        <li>
+          <h3>La pièce unique</h3>
+          <p>La javel ne réagit jamais deux fois pareil. Votre tee-shirt n'existe qu'en un exemplaire.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section" id="commande">
+      <header class="section-tete">
+        <span class="numero">03</span>
+        <h2>Commander</h2>
+        <p>Dites ce que vous voulez. Vous recevez une réponse avec le prix et le délai avant tout paiement.</p>
+      </header>
+
+      <form class="formulaire" id="formulaire" novalidate>
+        <div class="champ">
+          <label for="nom">Nom</label>
+          <input id="nom" name="nom" type="text" autocomplete="name" required>
+          <p class="erreur" data-erreur="nom"></p>
+        </div>
+        <div class="champ">
+          <label for="email">E-mail</label>
+          <input id="email" name="email" type="email" autocomplete="email" required>
+          <p class="erreur" data-erreur="email"></p>
+        </div>
+        <div class="champ">
+          <label for="piece">Pièce</label>
+          <select id="piece" name="piece" required></select>
+          <p class="erreur" data-erreur="piece"></p>
+        </div>
+        <div class="champ">
+          <label for="taille">Taille</label>
+          <select id="taille" name="taille" required></select>
+          <p class="erreur" data-erreur="taille"></p>
+        </div>
+        <div class="champ champ-large">
+          <label for="message">Message</label>
+          <textarea id="message" name="message" rows="5" placeholder="Le motif que vous imaginez, la coupe, une question…"></textarea>
+          <p class="erreur" data-erreur="message"></p>
+        </div>
+        <!-- Piège à robots : champ invisible, doit rester vide -->
+        <div class="pot-de-miel" aria-hidden="true">
+          <label for="site">Ne pas remplir</label>
+          <input id="site" name="site" type="text" tabindex="-1" autocomplete="off">
+        </div>
+        <div class="champ-large envoi">
+          <button class="bouton bouton-plein" type="submit" id="envoyer">Envoyer la demande</button>
+          <p class="etat" id="etat" role="status" aria-live="polite"></p>
+        </div>
+      </form>
+    </section>
+
+  </main>
+
+  <footer class="pied">
+    <span><span data-marque></span> <small data-signature></small></span>
+    <span id="liens-pied"></span>
+    <span>Fait main · Pièces uniques</span>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

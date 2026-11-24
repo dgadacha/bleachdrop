@@ -51,40 +51,14 @@ const REGLAGES = {
   // true = les photos passent en noir et blanc. false = vraies couleurs.
   photosEnNoirEtBlanc: false,
 
-  // Les pièces de la galerie.
+  // Les pièces de la galerie viennent toutes du back-office (onglet « Articles »).
+  // Sans article en ligne, la galerie annonce qu'il n'y a pas de pièce en vente.
+  // Forme d'une pièce, une fois lue dans la base :
   //  photos : une ou plusieurs images, avec une légende (Face, Dos…).
   //           Liste vide = un visuel provisoire est dessiné à la place.
   //  prix : prix normal, par ex. '6 000 XPF'. Vide = « Prix sur demande ».
   //         Les offres en cours s'appliquent dessus toutes seules.
-  pieces: [
-    {
-      titre: 'Spider-Man',
-      note: 'Javel sur coton noir · face et dos',
-      photos: [
-        { fichier: 'images/araignee-face.webp', legende: 'Face' },
-        { fichier: 'images/araignee-dos.webp', legende: 'Dos' },
-      ],
-      prix: '6 000 XPF',
-    },
-    {
-      titre: 'Centipede',
-      note: 'Javel sur coton noir · face et dos',
-      photos: [
-        { fichier: 'images/centipede-face.webp', legende: 'Face' },
-        { fichier: 'images/centipede-dos.webp', legende: 'Dos' },
-      ],
-      prix: '6 000 XPF',
-    },
-    {
-      titre: 'Magma',
-      note: 'Javel sur coton noir · effet délavé, face et dos',
-      photos: [
-        { fichier: 'images/magma-face.webp', legende: 'Face' },
-        { fichier: 'images/magma-dos.webp', legende: 'Dos' },
-      ],
-      prix: '6 000 XPF',
-    },
-  ],
+  pieces: [],
 };
 
 const SUR_MESURE = 'Motif sur mesure';
@@ -92,7 +66,6 @@ const SUR_MESURE = 'Motif sur mesure';
 // La base Firebase où le back-office (/admin) range les articles.
 // Ces deux valeurs sont publiques par nature : ce sont les règles de la base
 // (firestore.rules) qui décident de ce que chacun peut lire ou écrire.
-// Les pièces ci-dessus servent de secours si la base ne répond pas.
 const FIREBASE = {
   projet: 'bleachdrop-nc',
   cle: 'AIzaSyAGG1HBm9Unhi_Y8msKJnOYb10JliiT4Lc',
@@ -172,6 +145,10 @@ function poserGalerie() {
     if (filtrePieces === 'autres') return !piece.collection;
     return piece.collection === filtrePieces;
   });
+  if (!pieces.length) {
+    galerie.innerHTML = articlesCharges ? galerieVide() : '';
+    return;
+  }
   galerie.innerHTML = pieces.map((piece) => {
     const i = REGLAGES.pieces.indexOf(piece); // le visuel provisoire ne change pas avec le filtre
     const collection = collectionDe(piece);
@@ -199,6 +176,15 @@ function poserGalerie() {
       <a class="piece-lien" href="#commande" data-piece="${echapper(piece.titre)}">Commander cette pièce</a>
     </article>`;
   }).join('');
+}
+
+// Aucune pièce en vente : on le dit, et on propose le motif sur mesure s'il est ouvert.
+function galerieVide() {
+  const prochaine = prochaineCollection();
+  return `<div class="galerie-vide">
+    <p>Pas de pièce en vente pour le moment.${prochaine ? ` Les prochaines arrivent avec ${echapper(prochaine.nom)}.` : ''}</p>
+    ${REGLAGES.surMesure ? `<a class="bouton" href="#commande" data-piece="${echapper(SUR_MESURE)}">Demander un motif sur mesure</a>` : ''}
+  </div>`;
 }
 
 // Les clics dans la galerie. Branché une seule fois : la galerie peut être
@@ -242,8 +228,9 @@ function lireValeur(v) {
 }
 const lireChamps = (champs) => Object.fromEntries(Object.entries(champs || {}).map(([cle, v]) => [cle, lireValeur(v)]));
 
-// Remplace les pièces du site par les articles en ligne de la base.
-// En cas d'échec, ou si la base est vide, le site garde ses pièces de secours.
+// Les pièces du site sont les articles en ligne de la base.
+// Tant que la base n'a pas répondu, la galerie reste vide sans rien annoncer.
+let articlesCharges = false;
 async function chargerArticles() {
   try {
     const reponse = await fetch(adresseBase(':runQuery'), {
@@ -262,7 +249,6 @@ async function chargerArticles() {
       .map((ligne) => ({ id: ligne.document.name.split('/').pop(), ...lireChamps(ligne.document.fields) }))
       .filter((a) => a.titre)
       .sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
-    if (!articles.length) return;
 
     REGLAGES.pieces = articles.map((a) => ({
       id: a.id,
@@ -272,11 +258,13 @@ async function chargerArticles() {
       collection: a.collection || '',
       photos: (a.photos || []).filter((p) => p && (p.fichier || p.photoId)),
     }));
+  } catch (erreur) {
+    // Base injoignable : aucune pièce, le motif sur mesure reste proposé.
+  } finally {
+    articlesCharges = true;
     // Les collections disent quelles pièces sont en vente : on les attend.
     await collectionsPretes;
     poserPieces();
-  } catch (erreur) {
-    // Base injoignable : on garde les pièces écrites dans ce fichier.
   }
 }
 
@@ -431,9 +419,10 @@ function poserListes() {
     + (REGLAGES.surMesure
       ? option(SUR_MESURE, REGLAGES.prixSurMesure ? `${SUR_MESURE} — ${prixPour(null).actuel.replace(/^à partir de /i, 'dès ')}` : SUR_MESURE)
       : '');
-  document.getElementById('intro-pieces').textContent = REGLAGES.surMesure
-    ? 'Commandez une pièce, ou demandez un motif rien que pour vous.'
-    : 'Choisissez votre pièce.';
+  // Sans pièce en vente, c'est la galerie qui le dit (et propose le sur mesure).
+  const aucunePiece = articlesCharges && !piecesEnVente().length;
+  document.getElementById('intro-pieces').textContent = aucunePiece ? ''
+    : (REGLAGES.surMesure ? 'Commandez une pièce, ou demandez un motif rien que pour vous.' : 'Choisissez votre pièce.');
   document.getElementById('taille').innerHTML = option('', 'Choisir…')
     + REGLAGES.tailles.map((t) => option(t)).join('');
 }

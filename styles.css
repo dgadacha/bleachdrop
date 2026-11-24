@@ -294,6 +294,8 @@ h2 {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
   gap: 48px 24px;
 }
+.galerie-vide { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: flex-start; gap: 20px; }
+.galerie-vide p { max-width: 36ch; font: 400 clamp(18px, 2.2vw, 22px)/1.5 var(--texte); color: var(--gris); }
 
 /* Cartes sans cadre : la photo d'abord, les infos dessous */
 .piece { display: flex; flex-direction: column; }

@@ -1046,6 +1046,7 @@ function dessinerCodes() {
       <span>${utilisations} commande${utilisations > 1 ? 's' : ''} avec ce code</span>
       <div class="article-actions">
         <button class="lien" data-action-code="copier">Copier</button>
+        <button class="lien" data-action-code="cartes">Imprimer des cartes</button>
         <button class="lien" data-action-code="modifier">Modifier</button>
         <button class="lien" data-action-code="actif">${c.actif ? 'Désactiver' : 'Activer'}</button>
         <button class="lien danger pousse" data-action-code="supprimer">Supprimer</button>
@@ -1063,6 +1064,7 @@ $('liste-codes').addEventListener('click', async (e) => {
     e.target.textContent = 'Copié';
     setTimeout(() => { e.target.textContent = 'Copier'; }, 1500);
   }
+  if (action === 'cartes') ouvrirCartes(c);
   if (action === 'modifier') ouvrirCode(c);
   if (action === 'actif') await updateDoc(doc(db, 'codes', c.id), { actif: !c.actif }).catch(() => alert('Modification impossible.'));
   if (action === 'supprimer') {
@@ -1121,3 +1123,104 @@ $('formulaire-code').addEventListener('submit', async (e) => {
     message('Le code n\'a pas pu être enregistré.');
   }
 });
+
+// ---------- Cartes d'un code, à imprimer
+// 10 cartes au format carte de visite (85 × 55 mm) par feuille A4, collées
+// les unes aux autres : on coupe d'un bord à l'autre en suivant les repères des marges.
+// Le nom est écrit en texte, pas avec le logo dessiné (pas encore arrêté).
+const CARTE = { l: 85, h: 55, colonnes: 2, lignes: 5 };
+let codeCartes = null;
+
+const dateLongue = (jour) => new Date(`${jour}T12:00:00+11:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Pacific/Noumea' });
+
+function validiteCarte(c) {
+  const debut = c.debut && c.debut > aujourdhui() ? c.debut : '';
+  if (debut && c.fin) return `valable du ${dateCourte(debut)} au ${dateCourte(c.fin)}`;
+  if (debut) return `valable dès le ${dateLongue(debut)}`;
+  if (c.fin) return `valable jusqu'au ${dateLongue(c.fin)}`;
+  return '';
+}
+
+function carteCodePromo(c, phrase) {
+  const taille = c.id.length <= 10 ? 15 : c.id.length <= 15 ? 12 : 9.5; // en points : un code de 20 caractères tient sur la carte
+  return `<div class="carte-promo">
+    <div class="cp-tete"><span class="cp-marque">bleach drop</span><span class="cp-type">code promo</span></div>
+    <div class="cp-reduc"><span class="cp-taux">−${echapper(c.reduction)} %</span><span class="cp-phrase">${echapper(phrase)}</span></div>
+    <div class="cp-code"><span>avec le code</span><b style="font-size:${taille}pt">${echapper(c.id)}</b></div>
+    <div class="cp-pied"><span>bleachdrop.com</span><span>${echapper(validiteCarte(c))}</span></div>
+  </div>`;
+}
+
+function ouvrirCartes(c) {
+  codeCartes = c;
+  const f = $('formulaire-cartes');
+  f.reset();
+  f.phrase.value = 'sur votre prochaine commande';
+  $('titre-fiche-cartes').textContent = `Cartes du code ${c.id}`;
+  // Prévenir avant de distribuer des cartes qu'un client ne pourrait pas utiliser.
+  const [etat] = etatCode(c);
+  const alertes = {
+    'Désactivé': 'Ce code est désactivé : un client qui le saisit sera refusé. Active-le avant de distribuer les cartes.',
+    'À venir': `Ce code ne marche qu'à partir du ${c.debut ? dateLongue(c.debut) : ''}.`,
+    'Expiré': `Ce code a expiré${c.fin ? ` le ${dateLongue(c.fin)}` : ''} : un client qui le saisit sera refusé.`,
+  };
+  $('alerte-cartes').hidden = !alertes[etat];
+  $('alerte-cartes').textContent = alertes[etat] || '';
+  majApercuCartes();
+  $('fiche-cartes').showModal();
+}
+
+function optionsCartes() {
+  const f = $('formulaire-cartes');
+  return { phrase: f.phrase.value.trim(), fond: f.fond.value };
+}
+
+function majApercuCartes() {
+  if (!codeCartes) return;
+  const { phrase, fond } = optionsCartes();
+  $('apercu-carte').innerHTML = carteCodePromo(codeCartes, phrase);
+  $('apercu-carte').dataset.fond = fond;
+}
+$('formulaire-cartes').addEventListener('input', majApercuCartes);
+$('formulaire-cartes').addEventListener('change', majApercuCartes);
+
+$('formulaire-cartes').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const { phrase, fond } = optionsCartes();
+  $('fiche-cartes').close('imprime');
+  imprimerCartes(codeCartes, phrase, fond);
+});
+
+function imprimerCartes(c, phrase, fond) {
+  const { l, h, colonnes, lignes } = CARTE;
+  const L = colonnes * l; const H = lignes * h;
+  const x0 = (210 - L) / 2; const y0 = (297 - H) / 2;
+  const cartes = [];
+  for (let r = 0; r < lignes; r += 1) {
+    for (let col = 0; col < colonnes; col += 1) {
+      cartes.push(`<div class="emplacement" style="left:${x0 + col * l}mm;top:${y0 + r * h}mm">${carteCodePromo(c, phrase)}</div>`);
+    }
+  }
+  // Repères de coupe dans les marges, au bout de chaque ligne de coupe.
+  const reperes = [];
+  for (let col = 0; col <= colonnes; col += 1) {
+    const x = x0 + col * l;
+    reperes.push(`left:${x - 0.1}mm;top:${y0 - 8}mm;width:.2mm;height:5mm`, `left:${x - 0.1}mm;top:${y0 + H + 3}mm;width:.2mm;height:5mm`);
+  }
+  for (let r = 0; r <= lignes; r += 1) {
+    const y = y0 + r * h;
+    reperes.push(`left:${x0 - 14}mm;top:${y - 0.1}mm;width:10mm;height:.2mm`, `left:${x0 + L + 4}mm;top:${y - 0.1}mm;width:10mm;height:.2mm`);
+  }
+  $('impression').innerHTML = `<section class="planche-cartes" data-fond="${fond === 'noir' ? 'noir' : 'blanc'}">${cartes.join('')}`
+    + `${reperes.map((style) => `<i class="repere-coupe" style="${style}"></i>`).join('')}</section>`;
+  $('impression').dataset.orientation = 'portrait';
+  $('page-impression').textContent = '@page { size: A4 portrait; margin: 0; }';
+  document.body.classList.add('impression');
+  const finir = () => {
+    document.body.classList.remove('impression');
+    $('impression').innerHTML = '';
+    window.removeEventListener('afterprint', finir);
+  };
+  window.addEventListener('afterprint', finir);
+  document.fonts.ready.then(() => window.print());
+}

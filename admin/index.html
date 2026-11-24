@@ -231,6 +231,25 @@
     </form>
   </dialog>
 
+  <!-- Cartes d'un code promo à imprimer -->
+  <dialog id="fiche-cartes">
+    <form method="dialog" id="formulaire-cartes">
+      <h2 id="titre-fiche-cartes">Cartes à imprimer</h2>
+      <p class="discret">10 cartes par feuille A4, au format carte de visite (8,5 × 5,5 cm), avec des repères pour couper droit. Imprime à 100 % (taille réelle), sur du papier cartonné.</p>
+      <p class="alerte" id="alerte-cartes" hidden></p>
+      <div class="apercu-carte" id="apercu-carte"></div>
+      <label>Phrase sous la réduction <input name="phrase" maxlength="40" autocomplete="off"></label>
+      <div class="choix-fond">
+        <label class="case"><input type="radio" name="fond" value="blanc" checked> Fond blanc (moins d'encre)</label>
+        <label class="case"><input type="radio" name="fond" value="noir"> Fond noir</label>
+      </div>
+      <div class="actions">
+        <button type="button" class="bouton" data-fermer>Annuler</button>
+        <button type="submit" class="bouton bouton-plein">Imprimer</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Fiche d'une offre -->
   <dialog id="fiche-offre">
     <form method="dialog" id="formulaire-offre">
